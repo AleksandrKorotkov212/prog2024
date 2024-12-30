@@ -1,0 +1,51 @@
+30.12.2024 13:26:32 - control.init(100 and 100) completed
+30.12.2024 13:26:33 - gauss with parameters x= 1.000000 y= 1.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 67.000000 added to list
+30.12.2024 13:26:33 - gauss with parameters x= 15.000000 y= 24.000000 sigma_x= 0.500000 sigma_y= 0.100000 h= 50.000000 added to list
+30.12.2024 13:26:33 - gauss with parameters x= 23.000000 y= 47.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 70.000000 added to list
+30.12.2024 13:26:33 - gauss with parameters x= 3.000000 y= 5.000000 sigma_x= 6.000000 sigma_y= 7.000000 h= 23.000000 added to list
+30.12.2024 13:26:33 - gauss with parameters x= 50.000000 y= 9.000000 sigma_x= 4.000000 sigma_y= 6.000000 h= 100.000000 added to list
+30.12.2024 13:26:33 - gauss with parameters x= 48.000000 y= 51.000000 sigma_x= 2.000000 sigma_y= 4.000000 h= 10.000000 added to list
+30.12.2024 13:26:33 - gauss with parameters x= 71.000000 y= 62.000000 sigma_x= 0.100000 sigma_y= 0.500000 h= 100.000000 added to list
+30.12.2024 13:26:33 - gauss with parameters x= 80.000000 y= 2.000000 sigma_x= 0.200000 sigma_y= 0.300000 h= 150.000000 added to list
+30.12.2024 13:26:33 - gauss with parameters x= 4.000000 y= 50.000000 sigma_x= 2.000000 sigma_y= 3.000000 h= 100.000000 added to list
+30.12.2024 13:26:33 - gauss with parameters x= 2.000000 y= 4.000000 sigma_x= 3.000000 sigma_y= 1.000000 h= 50.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 37.000000 y= 43.000000 sigma_x= 2.000000 sigma_y= 5.000000 h= 70.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 1.000000 y= 2.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 40.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 5.000000 y= 90.000000 sigma_x= 0.200000 sigma_y= 1.000000 h= 43.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 56.000000 y= 34.000000 sigma_x= 0.100000 sigma_y= 0.200000 h= 10.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 80.000000 y= 1.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 30.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 27.000000 y= 65.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 60.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 30.000000 y= 90.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 50.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 48.000000 y= 2.000000 sigma_x= 2.000000 sigma_y= 2.000000 h= 52.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 10.000000 y= 10.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 40.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 87.000000 y= 80.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 35.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 50.000000 y= 43.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 80.000000 added to list
+30.12.2024 13:26:34 - gauss with parameters x= 27.000000 y= 95.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 40.000000 added to list
+30.12.2024 13:26:34 - Gauss number 1 has been put in
+30.12.2024 13:26:34 - Gauss number 2 has been put in
+30.12.2024 13:26:34 - Gauss number 3 has been put in
+30.12.2024 13:26:34 - Gauss number 4 has been put in
+30.12.2024 13:26:34 - Gauss number 5 has been put in
+30.12.2024 13:26:34 - Gauss number 6 has been put in
+30.12.2024 13:26:34 - Gauss number 7 has been put in
+30.12.2024 13:26:34 - Gauss number 8 has been put in
+30.12.2024 13:26:34 - Gauss number 9 has been put in
+30.12.2024 13:26:34 - Gauss number 10 has been put in
+30.12.2024 13:26:34 - Gauss number 11 has been put in
+30.12.2024 13:26:34 - Gauss number 12 has been put in
+30.12.2024 13:26:34 - Gauss number 13 has been put in
+30.12.2024 13:26:34 - Gauss number 14 has been put in
+30.12.2024 13:26:34 - Gauss number 15 has been put in
+30.12.2024 13:26:34 - Gauss number 16 has been put in
+30.12.2024 13:26:34 - Gauss number 17 has been put in
+30.12.2024 13:26:34 - Gauss number 18 has been put in
+30.12.2024 13:26:34 - Gauss number 19 has been put in
+30.12.2024 13:26:34 - Gauss number 20 has been put in
+30.12.2024 13:26:34 - Gauss number 21 has been put in
+30.12.2024 13:26:34 - Gauss number 22 has been put in
+30.12.2024 13:26:34 - All gausses in list have been put in
+30.12.2024 13:26:34 - File gnuplot.txt is ready for gnuplot
+30.12.2024 13:26:34 - Field has been written to BMP file bmp.BMP
+30.12.2024 13:26:34 - Field is binarized with cut: 3
+30.12.2024 13:26:35 - Wave alorithm has been completed with n= 5 and with 3 wavefields
+30.12.2024 13:26:35 - kMeans has been completed with k=3 p=3

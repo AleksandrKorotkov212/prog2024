@@ -1,0 +1,30 @@
+30.12.2024 13:26:32 - Command init with x= 100 and y= 100 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 1.000000 y= 1.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 67.000000 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 15.000000 y= 24.000000 sigma_x= 0.500000 sigma_y= 0.100000 h= 50.000000 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 23.000000 y= 47.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 70.000000 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 3.000000 y= 5.000000 sigma_x= 6.000000 sigma_y= 7.000000 h= 23.000000 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 50.000000 y= 9.000000 sigma_x= 4.000000 sigma_y= 6.000000 h= 100.000000 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 48.000000 y= 51.000000 sigma_x= 2.000000 sigma_y= 4.000000 h= 10.000000 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 71.000000 y= 62.000000 sigma_x= 0.100000 sigma_y= 0.500000 h= 100.000000 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 80.000000 y= 2.000000 sigma_x= 0.200000 sigma_y= 0.300000 h= 150.000000 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 4.000000 y= 50.000000 sigma_x= 2.000000 sigma_y= 3.000000 h= 100.000000 sent to control
+30.12.2024 13:26:33 - Command gauss with x= 2.000000 y= 4.000000 sigma_x= 3.000000 sigma_y= 1.000000 h= 50.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 37.000000 y= 43.000000 sigma_x= 2.000000 sigma_y= 5.000000 h= 70.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 1.000000 y= 2.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 40.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 5.000000 y= 90.000000 sigma_x= 0.200000 sigma_y= 1.000000 h= 43.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 56.000000 y= 34.000000 sigma_x= 0.100000 sigma_y= 0.200000 h= 10.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 80.000000 y= 1.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 30.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 27.000000 y= 65.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 60.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 30.000000 y= 90.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 50.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 48.000000 y= 2.000000 sigma_x= 2.000000 sigma_y= 2.000000 h= 52.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 10.000000 y= 10.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 40.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 87.000000 y= 80.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 35.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 50.000000 y= 43.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 80.000000 sent to control
+30.12.2024 13:26:34 - Command gauss with x= 27.000000 y= 95.000000 sigma_x= 1.000000 sigma_y= 1.000000 h= 40.000000 sent to control
+30.12.2024 13:26:34 - Command generate sent to control
+30.12.2024 13:26:34 - Command gnuplot with file gnuplot.txt sent to control
+30.12.2024 13:26:34 - Command wBMP with file bmp.BMP k= 1 sent to control
+30.12.2024 13:26:34 - Command BIN with cut= 3 sent to control
+30.12.2024 13:26:35 - Command Wave with n= 5 sent to control
+30.12.2024 13:26:35 - Command kMeans with k= 3 p= 3 sent to control
+30.12.2024 13:26:35 - end of batch file
