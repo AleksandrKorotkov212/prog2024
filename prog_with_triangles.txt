@@ -1,0 +1,1442 @@
+//212-коротков-александр
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <cmath>
+#include <string>
+#include <sstream>
+#include <cstdint>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <cstdlib>
+#include <limits>
+#include <algorithm>
+#include <random>
+#include <set>
+#define EPS 1e-6 //нужно для сравнения вещественных чисел в некоторых местах
+
+struct Point   //эти структуры нужны для работы с Wave и kMeans
+{ 
+    int x,y;
+};
+
+
+struct Color
+{ 
+    uint8_t r, g, b;
+};
+
+
+// Структура для точки с вещественными координатами (для точности)
+struct PointD {
+    double x, y;
+    PointD(double x_ = 0, double y_ = 0) : x(x_), y(y_) {}
+
+    // Оператор сравнения для упорядочивания
+    bool operator<(const PointD& other) const {
+        if (x < other.x) return true;
+        if (x > other.x) return false;
+        return y < other.y;
+    }
+
+    // Оператор равенства
+    bool operator==(const PointD& other) const {
+        return std::abs(x - other.x) < 1e-6 &&
+            std::abs(y - other.y) < 1e-6;
+    }
+};
+
+struct Triangle {
+    PointD a, b, c;
+    Triangle(PointD a_, PointD b_, PointD c_) : a(a_), b(b_), c(c_) {}
+
+    // Добавляем оператор сравнения
+    bool operator==(const Triangle& other) const {
+        return (a == other.a && b == other.b && c == other.c) ||
+            (a == other.a && b == other.c && c == other.b) ||
+            (a == other.b && b == other.a && c == other.c) ||
+            (a == other.b && b == other.c && c == other.a) ||
+            (a == other.c && b == other.a && c == other.b) ||
+            (a == other.c && b == other.b && c == other.a);
+    }
+};
+
+struct Edge {
+    PointD a, b;
+    Edge(PointD a_, PointD b_) : a(a_), b(b_) {}
+
+    // Оператор сравнения на равенство
+    bool operator==(const Edge& other) const {
+        return (a == other.a && b == other.b) ||
+            (a == other.b && b == other.a);
+    }
+
+    // Оператор сравнения для упорядочивания (если нужно для std::set)
+    bool operator<(const Edge& other) const {
+        return std::tie(a, b) < std::tie(other.a, other.b);
+    }
+};
+
+
+
+class Controllog //класс для записи лога control
+{ 
+    std::ofstream  controllog;  
+    bool log_on; 
+public:
+    Controllog() : log_on(false) {}
+
+	~Controllog()  //деструктор для того, чтобы при завершении программы файл закрывался
+	{
+        	if (controllog.is_open()) 
+		{
+            		controllog.close();
+        	}
+    	}
+
+ void switchlog() //функция для включения записи лога
+	{ 
+        	log_on = true;
+		controllog.open("controllog.txt", std::ios::app);
+        }
+    void log(const std::string& line) //сама функция записи лога
+	{ 
+        	if (log_on && controllog.is_open()) 
+		{
+            		controllog << current_time() << " - " << line << std::endl;
+        	}
+    	}
+
+    std::string current_time() {  //функция для записи времени в логе
+        std::time_t t = std::time(nullptr);
+        std::tm* now = std::localtime(&t);
+        std::ostringstream oss;
+        oss << std::put_time(now, "%d.%m.%Y %H:%M:%S");
+        return oss.str();
+    }
+};
+
+
+
+class Interfacelog  //аналогичный класс для лога interface
+{ 
+    std::ofstream interfacelog;  
+    bool log_on; 
+public:
+    Interfacelog() : log_on(false) {}
+
+	~Interfacelog() 
+	{
+        	if (interfacelog.is_open()) 
+		{
+            		interfacelog.close();
+        	}
+    	}
+
+	void switchlog()
+	{ 
+        	log_on = true;
+		interfacelog.open("interfacelog.txt", std::ios::app);
+        }
+    
+    void log(const std::string& line) 
+	{ 
+        	if (log_on && interfacelog.is_open()) 
+		{
+            		interfacelog << current_time() << " - " << line << std::endl;
+        	}
+    	}
+
+    std::string current_time() { 
+        std::time_t t = std::time(nullptr);
+        std::tm* now = std::localtime(&t);
+        std::ostringstream oss;
+        oss << std::put_time(now, "%d.%m.%Y %H:%M:%S");
+        return oss.str();
+    }
+};
+
+
+
+class Component  //класс, который записывает компоненты связности. Нужен для функций Wave и kMeans
+{ 
+public:
+	int xmin;   //параметры связной компоненты
+	int xmax;
+	int ymin;
+	int ymax;
+	double xres;
+	double yres;
+	double value1;
+	double value2;
+	double vector1_x;
+	double vector2_x;
+	double vector1_y;
+	double vector2_y;
+	int a=0;     //флаги, необходимые для поиска минимума и максимума
+	int b=0;
+    std::vector<std::vector<double>> componentvalues;
+    Component(const std::vector<std::vector<double>>& inpcomp) : componentvalues(inpcomp) {}
+
+    Component(int A, int B)
+	{
+        	componentvalues.resize(A, std::vector<double>(B, 255));
+	}
+	
+	void findparameters()
+	{
+		xmin=std::numeric_limits<int>::max();
+        	xmax=std::numeric_limits<int>::min();
+		ymin=std::numeric_limits<int>::max();
+        	ymax=std::numeric_limits<int>::min();
+        	double xsum=0;
+		double ysum=0;
+        	int count=0;
+
+        	for (int i=0; i<componentvalues.size(); i++) 
+		{
+            		for (int j=0; j<componentvalues[i].size(); j++) 
+			{
+                		if (componentvalues[i][j] == 0) 
+				{ 
+                    			xmin=std::min(xmin,i);
+                   	 		ymin=std::min(ymin,j);
+                    			xmax=std::max(xmax,i);
+                    			ymax=std::max(ymax,j);
+                    			xsum +=i;
+                    			ysum +=j;
+                    			count++;
+                		}
+            		}
+        	}
+        	xres=xsum/count;
+        	yres=ysum/count;
+
+        	std::cout << "xres=" << xres << std::endl;
+        	std::cout << "yres=" << yres << std::endl;
+
+        
+        	double cov_xx = 0;
+ 		double cov_xy = 0;
+		double cov_yy = 0;
+        for (int i=xmin; i<=xmax;i++) 
+	{
+        	for (int j=ymin; j<=ymax; j++) 
+		{
+                	if (componentvalues[i][j] == 0) 
+			{
+                    		double dx = i-xres;
+                    		double dy = j-yres;
+                    		cov_xx += dx * dx;
+                    		cov_xy += dx * dy;
+                    		cov_yy += dy * dy;
+                	}
+            	}	
+        }
+        cov_xx/=count;
+        cov_xy/=count;
+        cov_yy/=count;
+
+        // Собственные значения и векторы
+        double tr= cov_xx + cov_yy;
+        double det = cov_xx * cov_yy - cov_xy * cov_xy;
+        value1 = (tr+sqrt(tr*tr-4*det))/2;
+        value2 = (tr-sqrt(tr*tr-4*det))/2;
+
+        // Собственные векторы (упрощенный расчет)
+        if (cov_xy != 0) 
+	{
+            vector1_x = value1-cov_yy;
+            vector1_y = cov_xy;
+            vector2_x = value2-cov_yy;
+            vector2_y = cov_xy;
+        } else 
+	{
+            vector1_x = 1;
+            vector1_y = 0;
+            vector2_x = 0;
+            vector2_y = 1;
+        }
+
+        std::cout << "vector1_x=" << vector1_x << std::endl;
+        std::cout << "vector1_y=" << vector1_y << std::endl;
+        std::cout << "vector2_x=" << vector2_x << std::endl;
+        std::cout << "vector2_y=" << vector2_y << std::endl;
+    }
+
+
+
+		
+};
+
+
+class Gauss  //класс для записи Гауссиан и расчета их значений
+{ 
+public:
+    double x,y,sigma_x,sigma_y,h;
+    Gauss(double x, double y, double sigma_x, double sigma_y, double h)
+        : x(x), y(y), sigma_x(sigma_x), sigma_y(sigma_y), h(h) {}
+
+    double gaussvalue(int a, int b) const {  //расчет значения конкретного Гаусса в точке а,б
+	double value;
+        double dx=a-x;
+        double dy=b-y;
+        double denom_x=2*sigma_x*sigma_x;
+        double denom_y=2*sigma_y*sigma_y;
+        
+        if((fabs(denom_x)<EPS)||(fabs(denom_x)<EPS))
+	{
+            std::cerr << "Error: sigma_x or sigma_y =0" << std::endl;
+            return 0;
+        }
+        double expo=-((dx*dx)/denom_x + (dy*dy)/denom_y); 
+       	value=h*exp(expo);
+	return value;
+    }
+};
+
+
+class Field  // класс, хранящий поле и делающий с ним операции записи в файл
+{ 
+public:
+    int xfield,yfield;
+    std::vector<std::vector<double>> pixels;
+    std::vector<std::vector<double>> norma; 
+    std::vector<std::vector<Color>> colors; 
+    int xmin;
+    int xmax;
+    int ymin;
+    int ymax;
+    double xres;
+    double yres;
+    double value1;
+    double value2;
+    double vector1_x;
+    double vector1_y;
+    double vector2_x;
+    double vector2_y;
+    
+
+	Field(int xfield, int yfield) : xfield(xfield), yfield(yfield) 
+	{
+        	pixels.resize(xfield, std::vector<double>(yfield, 0));    
+		norma.resize(xfield, std::vector<double>(yfield, 0));
+        }
+
+    void setgauss(const Gauss& gauss)     //расчет значений на поле для конкретного Гаусса
+	{ 
+        	double value;
+        	for (int a=0; a<xfield; ++a) 
+		{
+            		for (int b=0; b<yfield; ++b) 
+			{
+                		value = gauss.gaussvalue(a,b);
+                		pixels[a][b]+=value*gauss.h; 
+				norma[a][b]+=gauss.h; 
+                	}
+        	}
+    	}
+  
+    void norm()   // функция выравнивания значений (чтобы не получились слишком большими
+	{
+		for (int a=0; a<xfield; ++a) 
+		{
+            		for (int b=0; b<yfield; ++b) 
+			{
+                		if(norma[a][b]>0)
+				{
+					pixels[a][b]/=norma[a][b];
+				}	
+                	}
+        	}
+	}
+	
+	void drawTriangles(const std::vector<Triangle>& triangles) 
+	{
+               	for (const auto& tri : triangles) 
+		{
+            		vectorsdraw(tri.a.x, tri.a.y, tri.b.x, tri.b.y, {0,0,255});
+            		vectorsdraw(tri.b.x, tri.b.y, tri.c.x, tri.c.y, {0,0,255});
+            		vectorsdraw(tri.c.x, tri.c.y, tri.a.x, tri.a.y, {0,0,255});
+        	}
+    	}
+
+
+    void gnuplot(const std::string& filename) //функция подготовки файла для Гнуплота
+	{ 
+        	std::ofstream out(filename);
+		if (!out.is_open()) 
+		{
+            		
+            		return;
+        	}
+        	for (int x = 0; x < xfield; ++x) 
+		{
+            	for (int y = 0; y < yfield; ++y) 
+			{
+                		out << x << " " << y << " " << pixels[x][y] << "\n";
+            		}
+            	out << "\n";
+        	}
+       		out.close();
+        }
+
+	void vectorsdraw(int x1, int y1, int x2, int y2, Color color) //рисуем вектор по двум заданным точкам
+	{
+        	int dx=x2-x1;
+        	int dy=y2-y1;
+        	int sx;
+        	int sy;
+        	int dxy=dx-dy;
+		if(x1<x2) sx=1;
+		else sx=-1;
+		if (y1<y2) sy=1;
+		else sy=-1;
+    
+        	while (true) 
+		{
+            		if (x1>=0 && x1<xfield && y1>=0 && y1<yfield) 
+			{
+                		colors[x1][y1] = color;  //красим точки в выбранный цвет
+                	}
+    
+            		if (x1==x2 && y1==y2) break;    //если дошли до второй точки
+            		if (2*dxy>-dy) //движение вдоль вектора ((x2-x1),(y2-y1))
+			{
+                		dxy-=dy;
+                		x1+=sx;
+            		}
+            		if (2*dxy<dx) 
+			{
+                		dxy+=dx;
+                		y1+=sy;
+            		}
+        	}
+    	}
+
+    void wBMP(const std::string& filename, int k,int b)   //функция записи поля в BMP-файл с параметром, отвечающим за цвет и параметром, отвечающим за рисование факторов
+	{
+        	const int BMP_HEADER_SIZE = 54;
+        	const int PIXEL_SIZE = 3;
+        	int file_size = BMP_HEADER_SIZE + PIXEL_SIZE*xfield*yfield;
+	        unsigned char bmp_header[BMP_HEADER_SIZE] = { 0 };
+
+        	// Заголовок BMP файла
+        	bmp_header[0] = 'B';
+        	bmp_header[1] = 'M';
+        	bmp_header[2] = file_size & 0xFF;
+        	bmp_header[3] = (file_size >> 8) & 0xFF;
+        	bmp_header[4] = (file_size >> 16) & 0xFF;
+        	bmp_header[5] = (file_size >> 24) & 0xFF;
+        	bmp_header[10] = BMP_HEADER_SIZE;
+
+        	// Заголовок DIB
+        	bmp_header[14] = 40; // Размер заголовка DIB
+        	bmp_header[18] = yfield & 0xFF;
+        	bmp_header[19] = (yfield >> 8) & 0xFF;
+        	bmp_header[20] = (yfield >> 16) & 0xFF;
+        	bmp_header[21] = (yfield >> 24) & 0xFF;
+        	bmp_header[22] = xfield & 0xFF;
+        	bmp_header[23] = (xfield >> 8) & 0xFF;
+        	bmp_header[24] = (xfield >> 16) & 0xFF;
+        	bmp_header[25] = (xfield >> 24) & 0xFF;
+        	bmp_header[26] = 1; 
+        	bmp_header[28] = 24; 
+
+        	std::ofstream file(filename, std::ios::binary);
+        	file.write(reinterpret_cast<char*>(bmp_header), BMP_HEADER_SIZE);
+
+        	
+        	if(k == 1)  //при к=1 запись ч/б
+		{ 
+			if(b==1) //чтобы рисовать факторы
+			{
+				vectorsdraw(xres, yres, xres+vector1_x*10,yres+vector1_y*10, {255, 0, 0}); //первый фактор
+				vectorsdraw(xres, yres, xres+vector2_x*10,yres+vector2_y*10, {0, 255, 0}); //второй фактор
+				std::cout << "1" << std::endl;
+				for (int i=xfield-1;i>=0;--i) 
+				{
+                			for (int j=0;j<yfield;++j) 
+					{
+                				if(colors[i][j].r != 255 || colors[i][j].g != 255 || colors[i][j].b != 255)
+						{
+                                        		unsigned char pixel[3] = { static_cast<unsigned char>(colors[i][j].r), 
+                    					static_cast<unsigned char>(colors[i][j].g), 
+                    					static_cast<unsigned char>(colors[i][j].b) };
+                    					file.write(reinterpret_cast<char*>(pixel), PIXEL_SIZE);
+                				}
+
+                				else 
+						{
+
+                    					int value = static_cast<int>(pixels[i][j] * 100); 
+                    					unsigned char pixel[3] = { static_cast<unsigned char>(std::min(std::max(value, 0), 255)),
+                                            		static_cast<unsigned char>(std::min(std::max(value, 0), 255)),
+                                            		static_cast<unsigned char>(std::min(std::max(value, 0), 255)) };
+                    					file.write(reinterpret_cast<char*>(pixel), PIXEL_SIZE);
+                				}
+
+                			}
+				}
+			} 
+		else 
+			{
+				for (int i = xfield - 1; i >= 0; --i) 
+				{
+                			for (int j = 0; j < yfield; ++j) 
+					{
+						int value = static_cast<int>(pixels[i][j] * 100); 
+                    				unsigned char pixel[3] = {static_cast<unsigned char>(std::min(std::max(value, 0), 255)),
+                                        	static_cast<unsigned char>(std::min(std::max(value, 0), 255)),
+                                        	static_cast<unsigned char>(std::min(std::max(value, 0), 255))};
+                    				file.write(reinterpret_cast<char*>(pixel), PIXEL_SIZE);
+					}	
+            			}
+			}
+			
+        	}
+
+        	else  //иначе цветная. Это нужно для kMeans
+		{ 
+            	for (int i = xfield - 1; i >= 0; --i) 
+			{
+                		for (int j = 0; j < yfield; ++j) 
+				{
+                    			unsigned char pixel[3] = {static_cast<unsigned char>(colors[i][j].r), 
+                                	static_cast<unsigned char>(colors[i][j].g), 
+                                	static_cast<unsigned char>(colors[i][j].b)};
+                    			file.write(reinterpret_cast<char*>(pixel), PIXEL_SIZE);
+                		}
+            		}
+        	}
+		
+		file.close();
+    	}
+
+    std::pair<int, int> setBMP(const std::string& filename)   //получаем размеры поля при считывании BMP-файла
+	{ 
+		std::ifstream file(filename, std::ios::binary);
+		if(!file)
+		{
+            		std::cerr << "BMP-file was not opened: " << filename << std::endl;
+            		return {0,0};
+        	}
+		unsigned char header[54];
+        	file.read(reinterpret_cast<char*>(header), 54);
+		if (header[0] != 'B' || header[1] != 'M' )
+		{
+            		std::cerr << "Invalid BMP file:" << filename << std::endl;
+            		return {0,0};
+       		}
+        	int yfield = header[18] | (header[19] << 8) | (header[20] << 16) | (header[21] << 24);
+        	int xfield = header[22] | (header[23] << 8) | (header[24] << 16) | (header[25] << 24);
+        	return {xfield, yfield};
+    	}
+
+    void rBMP(std::ifstream& file, int xfield, int yfield)    //сама функция считывания поля из BMP-файла
+	{ 
+        	for(int i=xfield-1; i>=0;--i)
+		{
+            		for(int j=0;j<yfield;j++)
+			{
+                		unsigned char color=file.get();
+                		file.get();
+                		file.get();
+                		pixels[i][j]=color;
+            		}
+            		file.ignore((4 - (yfield * 3) % 4) % 4);
+        	}
+    	}
+};
+
+
+
+class Analyz     //класс с функциями анализа компонент (Bin, Wave, kMeans)
+{ 
+    int xfield,yfield;
+    std::vector<std::vector<double>> AnalyzField;
+    std::vector<Component> components;
+    int count = 0;
+public:
+
+
+
+
+
+
+
+std::vector<Triangle> TrianglesHelp(const std::vector<PointD>& points) {
+        std::vector<Triangle> triangles;
+        if (points.empty()) return triangles;
+
+        // Создаем супер-треугольник
+        double minX = points[0].x, maxX = points[0].x;
+        double minY = points[0].y, maxY = points[0].y;
+        for (const auto& p : points) {
+            minX = std::min(minX, p.x); maxX = std::max(maxX, p.x);
+            minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
+        }
+
+        double dx = (maxX - minX) * 10, dy = (maxY - minY) * 10;
+        PointD p1(minX - dx, minY - dy);
+        PointD p2(maxX + dx, minY - dy);
+        PointD p3((minX + maxX) / 2, maxY + dy);
+        triangles.emplace_back(p1, p2, p3);
+
+        // Добавляем точки
+        for (const auto& p : points) {
+            std::vector<Triangle> badTriangles;
+            for (const auto& tri : triangles) {
+                if (PointInCircumcircle(p, tri)) {
+                    badTriangles.push_back(tri);
+                }
+            }
+
+            std::vector<Edge> polygon;
+            for (const auto& tri : badTriangles) {
+                std::vector<Edge> edges = { {tri.a, tri.b}, {tri.b, tri.c}, {tri.c, tri.a} };
+                for (const auto& edge : edges) {
+                    bool isShared = false;
+                    for (const auto& other : badTriangles) {
+                        if (&tri == &other) continue;
+                        if (otherHasEdge(other, edge)) isShared = true;
+                    }
+                    if (!isShared) polygon.push_back(edge);
+                }
+            }
+
+            // Удаляем плохие треугольники
+            triangles.erase(std::remove_if(triangles.begin(), triangles.end(),
+                [&](const Triangle& t) { return std::find(badTriangles.begin(), badTriangles.end(), t) != badTriangles.end(); }),
+                triangles.end());
+
+            // Добавляем новые
+            for (const auto& edge : polygon) {
+                triangles.emplace_back(edge.a, edge.b, p);
+            }
+        }
+
+        triangles.erase(std::remove_if(triangles.begin(), triangles.end(),
+            [&](const Triangle& t) {
+                return contains(t, p1) || contains(t, p2) || contains(t, p3);
+            }), triangles.end());
+
+        return triangles;
+    }
+
+    bool PointInCircumcircle(const PointD& p, const Triangle& tri) {
+        double ax = tri.a.x - p.x, ay = tri.a.y - p.y;
+        double bx = tri.b.x - p.x, by = tri.b.y - p.y;
+        double cx = tri.c.x - p.x, cy = tri.c.y - p.y;
+
+        double det = ax * (by * (cx * cx + cy * cy) - cy * (bx * bx + by * by))
+            - ay * (bx * (cx * cx + cy * cy) - cx * (bx * bx + by * by))
+            + (ax * ax + ay * ay) * (bx * cy - by * cx);
+        return det > 0;
+    }
+
+    bool otherHasEdge(const Triangle& tri, const Edge& edge) {
+        return Edge(tri.a, tri.b) == edge ||
+            Edge(tri.b, tri.c) == edge ||
+            Edge(tri.c, tri.a) == edge;
+    }
+
+    bool contains(const Triangle& tri, const PointD& p) {
+        return tri.a == p || tri.b == p || tri.c == p;
+    }
+
+    // Проверка попадания точки в компоненту
+    bool PointInComponent(int x, int y) const {
+        for (const auto& comp : components) {
+            if (x >= comp.xmin && x <= comp.xmax &&
+                y >= comp.ymin && y <= comp.ymax) {
+                if (abs(comp.componentvalues[x][y]) < EPS) return true;
+            }
+        }
+        return false;
+    }
+
+
+	void Triangulate(const std::string filename) 
+	{
+        	std::vector<PointD> centers;
+        	for (const auto& comp : components) 
+		{
+            		centers.emplace_back(comp.xres, comp.yres);
+        	}
+
+        	auto triangles = TrianglesHelp(centers);
+        	Field trianglefield(xfield,yfield);
+		for(int i = xfield - 1; i>=0; --i)
+		{
+            		for(int j = 0; j<yfield; ++j)
+			{
+                		trianglefield.pixels[i][j]=0;
+            		}
+        	}
+		trianglefield.drawTriangles(triangles);
+        	trianglefield.wBMP(filename, 1,1);
+    }
+
+
+
+
+    void Bin(int cut, Field& field)   //функция Bin, которая делает срез  по нужной высоте
+	{ 
+        	AnalyzField.resize(field.pixels.size(), std::vector<double>(field.pixels[0].size(), 0));   //вводится дополнительное поле
+        	xfield=field.pixels.size();
+        	yfield=field.pixels[0].size();
+	        for(int i = xfield - 1; i>=0; --i)
+		{
+            		for(int j = 0; j<yfield; ++j)
+			{
+                		if(field.pixels[i][j] < cut)
+				{
+                    			AnalyzField[i][j] = 255;
+                		}
+                		else
+				{
+                    			AnalyzField[i][j] = 0;
+                		}
+            		}
+        	}
+        	Field binfield(field.xfield, field.yfield);
+        	binfield.pixels=AnalyzField;
+        	binfield.wBMP("cut.bmp", 1,0);       //запись среза в BMP-файл
+    	}
+
+   size_t wave(int n)     //функция Wave типа size_t, потому что таким образом можно узнать сразу и количество компонент и с параметром шума n
+	{ 
+        	Component claster(xfield,yfield);
+		
+		
+        	int k = 0; // Тут будет записано значение count
+
+        	for(int i = xfield - 1; i >= 0; --i)
+		{
+            		for(int j = 0; j < yfield; ++j)
+			{
+                		k = burn(claster.componentvalues, i, j, 1);   //рекурсивная функция поджога
+				if(k > n)
+				{
+                    			components.emplace_back(claster);  //запись компоненты в список
+					components.back().findparameters(); //вычисляем все необходимые данные для компоненты и факторов
+					claster = Component(xfield,yfield);
+				}
+                		else if(k > 0 && k < n)
+				{
+                    			claster = Component(xfield,yfield);
+                		}
+                        	count = 0;
+	                }
+            	}
+		for(int i = 0; i < (int) components.size() ; i++)
+		{
+                	Field wavefield(xfield,yfield);
+                	wavefield.pixels = components[i].componentvalues;
+			wavefield.colors.resize(xfield, std::vector<Color>(yfield, {255, 255, 255}));
+                wavefield.xres = components[i].xres;  //переносим значения компоненты в поле, чтобы нарисовать компоненты
+                wavefield.yres = components[i].yres;
+          	wavefield.vector1_x = components[i].vector1_x;
+                wavefield.vector1_y = components[i].vector1_y;
+                wavefield.vector2_x = components[i].vector2_x;
+                wavefield.vector2_y = components[i].vector2_y;
+                wavefield.value1 = components[i].value1;
+                wavefield.value2 = components[i].value2;
+                wavefield.wBMP(std::to_string(i+1) + "component.bmp", 1,1);  //рисуем с факторами
+		}
+		return components.size();
+        }
+
+    int burn(std::vector<std::vector<double>> &claster, int a, int b, int k)    
+	{ 
+        	if(a < 1 || b < 1 || a > (int) claster.size() - 1 || b > (int) claster[0].size() - 1 || (int) AnalyzField[a][b] == 255) return -1;
+        	else
+		{
+            		AnalyzField[a][b] = 255;
+                        count++;
+            		claster[a][b] = 0;
+            		burn(claster, a+1, b, k+1);
+            		burn(claster, a-1, b, k+1);
+            		burn(claster, a, b+1, k+1);
+            		burn(claster, a, b-1, k+1);
+            		burn(claster, a-1, b-1, k+1);
+            		burn(claster, a+1, b+1, k+1);
+            		burn(claster, a+1, b-1, k+1);
+            		burn(claster, a-1, b+1, k+1);
+        	}
+        	return count;
+    	}
+
+ 
+
+	std::vector<Color> setColor(int k)     //вспомогательная функция, нужная в kMeans
+	{ 
+        	std::vector<Color> colors;
+        	std::random_device rd;
+        	std::mt19937 gen(rd());
+        	std::uniform_int_distribution<int> rand(0, 255);
+        	for(int i = 0; i < k; i ++)
+		{
+            		colors.push_back({static_cast<uint8_t>(rand(gen)), static_cast<uint8_t>(rand(gen)), static_cast<uint8_t>(rand(gen))});
+        	}
+        	return colors;
+    	}
+
+    void kMeans(int k, int p)      //kMeans с ядрами
+	{ 
+		std::vector<Point> points;
+                for(const auto& comp : components)
+		{
+            		for(int i = 0; i < xfield; i++)
+			{
+                		for(int j = 0; j < yfield; j++)
+				{
+                    			if(comp.componentvalues[i][j] == 0)         //поиск точек для алгоритма
+					{
+                        			points.push_back({i, j}); 
+                    			}
+                		}
+            		}
+        	}
+        	if(points.empty())              //если не нашли точки
+		{ 
+            		std::cerr << "There are no points to do kMeans" << std::endl;
+            		return;
+        	}
+        	std::vector<Point> centroids;
+        	std::random_device rd;
+        	std::mt19937 gen(rd());
+        	std::uniform_int_distribution<> xrand(0, xfield - 1);         //рандомно задааем точкии
+        	std::uniform_int_distribution<> yrand(0, yfield - 1);
+	        for(int i = 0; i < k; i++)
+		{
+            		centroids.push_back({xrand(gen), yrand(gen)}); 
+        	}
+	        bool turn = true;
+        	std::vector<int> colorvalues(points.size(), -1);
+	        while(turn)
+		{
+            		turn = false;
+                   	for(size_t i = 0; i < points.size(); i++)
+			{
+                		double minDist = std::numeric_limits<double>::max();
+                		int clastercolor = -1;
+		                for(int j = 0; j < k; j++)
+				{ 
+                    			double dist = std::pow(points[i].x - centroids[j].x, 2) + std::pow(points[i].y - centroids[j].y, 2);   //считаем расстояние до выбранных точек и ищем минимальное
+                    			if(dist < minDist)
+					{
+                        			minDist = dist;
+                        			clastercolor = j;
+                    			}
+      	         		}
+		                if(colorvalues[i] != clastercolor)      //если цвет не совпадает, то изменяем
+				{
+                    			colorvalues[i] = clastercolor; 
+                    			turn = true;
+                		}
+            		}
+			std::vector<Point> newCentroids(k, {0, 0});
+            		std::vector<int> flags(k, 0);
+		        for(size_t i = 0; i < points.size(); i++)
+			{ 
+                		newCentroids[colorvalues[i]].x += points[i].x;
+                		newCentroids[colorvalues[i]].y += points[i].y;
+                		flags[colorvalues[i]]++;
+            		}
+            		for(int j = 0; j < k; j++)
+			{
+                		if(flags[j] > 0)
+				{
+                    			newCentroids[j].x /= flags[j];
+                    			newCentroids[j].y /= flags[j];
+                		}
+            		}
+		        centroids = newCentroids;
+		}     //цикл заканчивается, когда ни одна из точек не меняет 
+		std::vector<Color> componentcolors = setColor(k);         //ракраска компонент 
+        	std::vector<std::vector<Color>> colorpicture(xfield, std::vector<Color>(yfield, {255, 255, 255})); 
+        	std::vector<std::vector<Point>> coloredlist(k);
+	        for(size_t i = 0; i < points.size(); i++)
+		{ 
+            		int clastercolor = colorvalues[i];
+            		colorpicture[points[i].x][points[i].y] = componentcolors[clastercolor];
+            		coloredlist[clastercolor].push_back(points[i]); 
+        	}
+    		std::vector<std::vector<Point>> subCentroids(k);     //алгоритм kMeans для каждой компоненты
+	        for(int q=0; q<k; q++)
+		{ 
+            		if(coloredlist[q].empty()) continue;
+		        std::vector<Point>& clasterPoints = coloredlist[q];
+            		std::vector<Point> subCenters(p);
+		        for(int i = 0; i < p; i++)
+			{
+                		subCenters[i] = clasterPoints[std::uniform_int_distribution<>(0, clasterPoints.size() - 1)(gen)];
+            		} 
+		        bool subturn = true;
+            		std::vector<int> subcolorvalues(clasterPoints.size(), -1);
+		        while(subturn)
+			{
+                		subturn = false;
+              			for(size_t i = 0; i < clasterPoints.size(); i++)
+				{
+                    			double minDist = std::numeric_limits<double>::max();
+                    			int subclastercolor = -1; 
+			                for(int j = 0; j < p; j++)
+					{
+                        			double dist = std::pow(clasterPoints[i].x - subCenters[j].x, 2) + std::pow(clasterPoints[i].y - subCenters[j].y, 2);
+                        			if(dist < minDist)
+						{
+                            				minDist = dist;
+                            				subclastercolor = j; 
+                        			}
+                    			}	
+			                if(subcolorvalues[i] != subclastercolor)
+					{
+                        			subcolorvalues[i] = subclastercolor;
+                        			subturn = true;
+                    			}
+                		}
+           			std::vector<Point> newSubCenters(p, {0, 0});
+                		std::vector<int> subflags(p, 0);
+		                for(size_t i = 0; i < clasterPoints.size(); i++)
+				{
+                    			newSubCenters[subcolorvalues[i]].x += clasterPoints[i].x;
+                    			newSubCenters[subcolorvalues[i]].y += clasterPoints[i].y;
+                    			subflags[subcolorvalues[i]]++;
+                		}
+		                for(int j = 0; j < p; j++)
+				{
+                    			if(subflags[j] != 0)
+					{
+                        			newSubCenters[j].x /= subflags[j];
+                        			newSubCenters[j].y /= subflags[j];
+                    			}
+                		}
+		                subCenters = newSubCenters;
+            		}
+            		subCentroids[q] = subCenters;
+          		for(const auto& subCenter: subCenters)
+			{
+                		colorpicture[subCenter.x][subCenter.y] = {0, 0, 0}; 
+            		}
+        	}
+        	Field fieldkMeans(xfield,yfield);        //запись результатов kMeans в цветной BMP  
+        	fieldkMeans.colors = colorpicture;
+        	fieldkMeans.wBMP("kMeans.bmp", 2,0);
+    }
+};
+
+class Control   //класс управления 
+{ 	
+	std::vector<Gauss> list;    //список Гауссов
+    	Field* field;               //поле
+    	Analyz analyz;              //класс для функций Wave и kMeans
+	bool initial;               //флаг инициализации поля
+public:
+	Control() : field(nullptr), initial(false) {}
+    	Controllog controllog;              //класс для логов control
+
+    
+    	void controlinit(int x, int y)   //функция инициализации поля
+	{ 
+        	if (initial) 
+		{
+            		controllog.log("init failed, field has already been initialized");
+            		return;
+        	}
+        	field = new Field(x, y); 
+		initial=true;
+        	controllog.log("control.init(" + std::to_string(x) + " and " + std::to_string(y) + ") completed");
+       	}
+
+
+
+	void setnewgauss(double x,double y, double sigma_x, double sigma_y,double h)     //функция записи Гаусса с параметрами в список 
+	{
+        	list.emplace_back(x, y, sigma_x, sigma_y,h);
+		controllog.log("gauss with parameters x= " + std::to_string(x) + " y= " + std::to_string(y) + " sigma_x= " + std::to_string(sigma_x) + " sigma_y= " + std::to_string(sigma_y) + " h= " + std::to_string(h) + " added to list");
+        }
+
+
+
+	void generate()     //функция, располагающая гауссы из списка на поле 
+	{ 
+        	if (!initial) 
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("generate failed: there is not any field");
+            		return;
+        	}
+        	if (list.empty())
+		{
+           		controllog.log("No gausses have been added");
+            		return;
+        	}
+        	for (size_t i = 0; i < list.size(); ++i) 
+		{
+            		field->setgauss(list[i]);
+            		controllog.log("Gauss number " + std::to_string(i+1) + " has been put in");
+		}
+		field->norm();
+        	list.clear();
+        	controllog.log("All gausses in list have been put in");
+    	}
+
+
+    	void controlgnuplot(const std::string& filename)    //функция, которая готовит файл для гнуплота 
+	{ 
+        	if (!initial) 
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("gnuplot failed: there is not any field");
+            		return;
+        	}
+		field->gnuplot(filename);
+        	controllog.log("File " + filename + " is ready for gnuplot");
+	}
+
+    	void controlwBMP(const std::string& filename, int k,int b)     //функция для записи поля в BMP 
+	{ 
+        	if (!initial) 
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("wBMP failed: there is not any field");
+            		return;
+        	}
+        	field->wBMP(filename, k,b);
+		controllog.log("Field has been written to BMP file " + filename );
+    	}
+
+    	void controlrBMP(const std::string& filename)    //функция чтения поля из BMP
+	{ 
+        	if (initial)
+		{
+            		std::cerr << "Field was initialized!" << std::endl;
+            		controllog.log("rBMP failed: there is an initialized field");
+            		return;
+        	}
+
+        	std::pair<int,int> sizes = field->setBMP(filename);
+        	int xnew= sizes.first;
+        	int ynew= sizes.second;
+
+        	if(xnew==0 || ynew==0)
+		{
+            		std::cerr << "BMP file" << filename << "was not read" << std::endl;
+            		controllog.log("Error in reading BMP file" + filename);
+        	}
+
+        	delete field;
+        	field = new Field(xnew, ynew);
+		std::ifstream file(filename, std::ios::binary);
+        	file.ignore(54);
+        	field->rBMP(file, xnew, ynew);
+        	file.close();
+		controllog.log("Field has been read from bmp file:" + filename);
+		initial=true;
+    	}
+
+
+
+    	void controlBin(int cut)           //функция Bin для среза по нужной высоте
+	{ 
+        	if (!initial) 
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("Bin failed: there is not any field");
+            		return;
+        	}
+        	analyz.Bin(cut, *field);
+        	controllog.log("Field is binarized with cut: " + std::to_string(cut) );
+    	}
+
+
+
+	void controlWave(int n)        //запуск волнового алгоритма
+	{ 
+	        if (!initial) 
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("Wave failed: there is not any field");
+            		return;
+        	}
+		size_t size;
+		size=analyz.wave(n);
+		controllog.log("Wave alorithm has been completed with n= " + std::to_string(n) + " and with " + std::to_string(size) + " wavefields");
+    	}
+
+    void controlkMeans(int k, int p)            //закпуск алгоритма kMeans
+	{ 
+        	if(!initial)
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("kMeans failed: there is not any field");
+            		return;
+        	}
+		analyz.kMeans(k, p);
+		controllog.log("kMeans has been completed with k=" + std::to_string(k) + " p=" + std::to_string(p));
+    	}
+
+    void controlTriangulate(const std::string& filename)
+	{
+		analyz.Triangulate(filename);
+		controllog.log("Triangulate has been completed in file " + filename);
+	}
+
+    
+};
+
+
+class Myinterface          //класс интерфейса, который взаимодействует с пользователем
+{
+public:
+ void prog()               //функция - интерфейс 
+{
+	Interfacelog interfacelog;     //класс для логов интерфейса
+	std::string configname;
+	std::cout << "Enter your name of config-file" << std::endl;
+	std::cin >> configname;      // название конфиг-файла
+	std::ifstream config(configname);	
+	if (!config)
+	{
+		std::cerr << "Config file has not been opened" << std::endl;
+	}
+	std::string input;
+	std::string filename;
+	config >> input;
+	if (input == "file")
+	{
+		config >> filename;
+	}
+	std::string key;     //считывание ключей
+	std::string pause;   //batch_pause
+	std::string intlog;       //лог интерфейса
+	std::string contlog;    //лог сервера
+	int xfield,yfield;     //заданные значения
+	double sigma_x_default,sigma_y_default,xdefault,ydefault,hdefault;
+        while (config >> key) 
+	{     //считывание ключей из конфига
+		if (key == "batch_pause") config >> pause;
+		else if (key == "interfacelog") config >> intlog;
+		else if (key == "controllog") config >> contlog;
+            	else if (key == "xfield") config >> xfield;
+            	else if (key == "yfield") config >> yfield;
+            	else if (key == "xdefault") config >> xdefault;
+            	else if (key == "ydefault") config >> ydefault;
+            	else if (key == "sigma_x_default") config >> sigma_x_default;
+            	else if (key == "sigma_y_default") config >> sigma_y_default;
+            	else if (key == "hdefault") config >> hdefault;
+        }
+	Control control;  //задаем класс управления
+	if (contlog=="ON")   //параметры для логирования интерфейса и сервера
+	{
+		control.controllog.switchlog();
+	}
+	if (intlog=="ON")
+	{	
+        	interfacelog.switchlog();
+	}
+    	
+	if (input == "file")     //работа с пользователем при вводе команд из файла 
+	{
+		std::string command;
+		std::ifstream batch(filename);
+		if (!batch)
+		{
+			std::cerr << "batch file has not been opened" << std::endl;
+		}
+        	while (true) 
+		{
+			if (pause=="ON")
+			{
+				std::cout << "Press enter to continue" << std::endl;
+                                std::cin.get();
+			}
+			batch >> command;
+			if (command == "init") 
+			{
+				int x,y;
+                		batch >> x ;
+				if(!x)
+				{
+					x=xfield;
+					interfacelog.log("x=xfield=" + std::to_string(x));
+				}
+				batch >> y ;
+				if(!x)
+				{
+					y=yfield;
+					interfacelog.log("y=yfield=" + std::to_string(y));
+				}
+				interfacelog.log("Command init with x= " + std::to_string(x) + " and y= " + std::to_string(y) + " sent to control");
+				control.controlinit(x,y);
+            		} 
+			else if (command == "gauss") 
+			{
+                		double sigma_x, sigma_y,x,y,h;
+				batch >> x;
+				if(!x)
+				{
+					x=xdefault;
+					interfacelog.log("x=xdefault=" + std::to_string(x));
+				}
+				batch >> y;
+				if(!y)
+				{
+					y=ydefault;
+					interfacelog.log("y=ydefault=" + std::to_string(y));
+				}
+				batch >> sigma_x;
+				if(!sigma_x)
+				{
+					sigma_x=sigma_x_default;
+					interfacelog.log("sigma_x=sigma_x_default=" + std::to_string(sigma_x));
+				}
+				batch >> sigma_y ;
+				if(!sigma_y)
+				{
+					sigma_y=sigma_y_default;
+					interfacelog.log("sigma_y=sigma_y_default=" + std::to_string(sigma_y));
+				}
+				batch >> h;
+				if(!h)
+				{
+					h=hdefault;
+					interfacelog.log("h=hdefault=" + std::to_string(h));
+				}
+				interfacelog.log("Command gauss with x= " + std::to_string(x) + " y= " + std::to_string(y) + " sigma_x= " + std::to_string(sigma_x) + " sigma_y= " + std::to_string(sigma_y) + " h= " + std::to_string(h) + " sent to control");
+                		control.setnewgauss(x, y, sigma_x, sigma_y, h);
+        		} 
+			else if (command == "generate") 
+			{
+				interfacelog.log("Command generate sent to control");
+                		control.generate();
+        		} 
+			else if (command == "gnuplot") 
+			{
+                		std::string savefile;
+                		batch >> savefile;
+				interfacelog.log("Command gnuplot with file " + savefile +  " sent to control");
+                		control.controlgnuplot(savefile);
+         		}
+			else if (command == "wBMP") 
+			{
+                		std::string savefileBMP;
+				int k;
+				int b;
+                		batch >> savefileBMP;
+				batch >> k;
+				batch >> b;
+				interfacelog.log("Command wBMP with file " + savefileBMP + "k=" + std::to_string(k) + "b=" + std::to_string(b) + " sent to control");
+                		control.controlwBMP(savefileBMP,k,b);
+         		}
+			else if (command == "rBMP") 
+			{
+                		std::string readfileBMP;
+				batch >> readfileBMP;
+				interfacelog.log("Command rBMP with file " + readfileBMP + " sent to control");
+                		control.controlrBMP(readfileBMP);
+         		}
+			else if (command == "BIN") 
+			{
+				int cut;
+				batch >> cut;                
+				interfacelog.log("Command BIN with cut= " + std::to_string(cut) + " sent to control");
+                		control.controlBin(cut);
+         		}
+			else if (command == "Wave") 
+			{
+				int n;
+				batch >> n;                
+				interfacelog.log("Command Wave with n= " + std::to_string(n) + " sent to control");
+                		control.controlWave(n);
+         		}
+			else if (command == "kMeans") 
+			{
+				int k;
+				batch >> k;
+				int p;
+				batch >> p;                
+				interfacelog.log("Command kMeans with k= " + std::to_string(k) + " p= " + std::to_string(p) + " sent to control");
+                		control.controlkMeans(k,p);
+			}
+			else if (command == "Triangulate") 
+			{
+				std::string triangulatefile;
+				batch >> triangulatefile;             
+				interfacelog.log("Command Triangulate in file " + triangulatefile + " sent to control");
+                		control.controlTriangulate(triangulatefile);
+			}
+	    		else if (command == "away")
+	    		{		
+		    		interfacelog.log("end of batch file");
+				return;
+	    		}		
+         		else 
+	 		{
+               			std::cerr << "Error: wrong command.\n";
+				interfacelog.log("Wrong command in batch file");
+         		}
+     		}
+	}	
+
+	else if (input== "key")  //работа с пользователем, если ввод команд с клавиатуры
+	{
+        	std::string command;
+        	while (true) 
+		{
+            	std::cout << "Enter command (init - to create a field, gauss - to add Gauss, generate - to put Gauss on a field, gnuplot - to  draw field in gnuplot, wBMP - to write field to BMP file" << std::endl;
+		std::cout << "rBMP - to read field from BMP file, BIN - to make a cut, Wave - to do wave-algorithm, kMeans - do kMeans-algorithm, away - to exit)" << std::endl;
+            		std::cin >> command;
+            		if (command == "init") 
+			{
+				int x,y;
+                		std::cout << "Enter your size of field x";
+                		std::cin >> x ;
+				if(!x)
+				{
+					x=xfield;
+					interfacelog.log("x=xfield=" + std::to_string(x));
+				}
+				std::cout << "Enter your size of field y: ";
+                		std::cin >> y ;
+				if(!x)
+				{
+					y=yfield;
+					interfacelog.log("y=yfield=" + std::to_string(y));
+				}
+				interfacelog.log("Command init with x= " + std::to_string(x) + " and y= " + std::to_string(y) + " sent to control");
+				control.controlinit(x,y);
+            		} 
+			else if (command == "gauss") 
+			{
+                		double sigma_x, sigma_y,x,y,h;
+				std::cout << "Enter your x coordinate";
+				std::cin >> x;
+				if(!x)
+				{
+					x=xdefault;
+					interfacelog.log("x=xdefault= " + std::to_string(x));
+				}
+				std::cout << "Enter your y coordinate";
+				std::cin >> y;
+				if(!y)
+				{
+					y=ydefault;
+					interfacelog.log("y=ydefault= " + std::to_string(y));
+				}
+				std::cout << "Enter your sigma_x";
+				std::cin >> sigma_x;
+				if(!sigma_x)
+				{
+					sigma_x=sigma_x_default;
+					interfacelog.log("sigma_x=sigma_x_default= " + std::to_string(sigma_x));
+				}
+				std::cout << "Enter your sigma_y";
+				std::cin >> sigma_y;
+				if(!sigma_y)
+				{
+					sigma_y=sigma_y_default;
+					interfacelog.log("sigma_y=sigma_y_default= " + std::to_string(sigma_y));
+				}
+				std::cout << "Enter your height";
+				std::cin >> h;
+				if(!h)
+				{
+					h=hdefault;
+					interfacelog.log("h=hdefault=" + std::to_string(h));
+				}
+				interfacelog.log("Command gauss with x= " + std::to_string(x) + " y= " + std::to_string(y) + " sigma_x= " + std::to_string(sigma_x) + " sigma_y= " + std::to_string(sigma_y) + " h= " + std::to_string(h) + " sent to control");
+                		control.setnewgauss(x, y, sigma_x, sigma_y, h);
+        		} 
+			else if (command == "generate") 
+			{
+				interfacelog.log("Command generate sent to control");
+                		control.generate();
+        		} 
+			else if (command == "gnuplot") 
+			{
+                		std::string savefile;
+                		std::cout << "in what file do you want to save for gnuplot: ";
+                		std::cin >> savefile;
+				interfacelog.log("Command gnuplot with file " + savefile + " sent to control");
+                		control.controlgnuplot(savefile);
+         		}
+			else if (command == "wBMP") 
+			{
+                		std::string savefileBMP;
+				int k;
+				int b;
+                		std::cout << "in what file do you want to save for BMP: ";
+                		std::cin >> savefileBMP;
+				std::cout << "if you want wb-picture, enter 1, else enter 2";
+				std::cin >> k;
+				std::cout << "if you want to write factors, enter 1, else 0";
+				std::cin >> b;
+				interfacelog.log("Command wBMP with file " + savefileBMP + "k=" + std::to_string(k) + "b=" + std::to_string(b) + " sent to control");
+                		control.controlwBMP(savefileBMP,k,b);
+         		}
+			else if (command == "rBMP") 
+			{
+                		std::string readfileBMP;
+				std::cout << "from what file do you want to read BMP data?";
+                		std::cin >> readfileBMP;
+				interfacelog.log("Command rBMP with file " + readfileBMP + " sent to control");
+                		control.controlrBMP(readfileBMP);
+         		}
+			else if (command=="BIN") 
+			{
+				int cut;
+				std::cout << "enter your cut limit ";
+				std::cin >> cut;                      
+				interfacelog.log("Command BIN with cut= " + std::to_string(cut) + " sent to control");
+                		control.controlBin(cut);
+         		}
+			else if (command == "Wave") 
+			{
+				int n;
+				std::cout << "enter your 'n' for Wave";
+				std::cin >> n;
+				interfacelog.log("Command Wave with n= " + std::to_string(n) + " sent to control");
+                		control.controlWave(n);
+         		}
+			else if (command == "kMeans") 
+			{
+				int k;
+				std::cout << "enter your 'n' for Wave";
+				std::cin >> k;
+				int p;
+				std::cout << "enter your nuber of centers 'p' for kMeans";
+				std::cin >> p;                
+				interfacelog.log("Command kMeans with k= " + std::to_string(k) + " p=" + std::to_string(p) + " sent to control");
+                		control.controlkMeans(k,p);
+			}
+	    		else if (command=="away")
+	    		{		
+		    		interfacelog.log("command away");
+				return;
+	    		}		
+         		else 
+	 		{
+               			std::cerr << "Error: wrong command.\n";
+				interfacelog.log("Wrong command from keyboard");
+         		}
+     		}
+	}	
+	else
+	{
+		std::cerr << "Error: wrong command in config.\n";
+	}
+}
+};
+
+
+int main()    //функция main для запуска и работы программы 
+{
+    Myinterface myinterface;
+    myinterface.prog();
+    return 0;
+}
