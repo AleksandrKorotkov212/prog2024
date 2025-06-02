@@ -1,0 +1,1955 @@
+//212-Коротков-Александр
+#include <iostream>
+#include <tuple>
+#include <queue>    // Для std::queue
+#include <utility>  // Для std::pair
+#include <fstream>
+#include <vector>
+#include <cmath>
+#include <string>
+#include <sstream>
+#include <cstdint>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <cstdlib>
+#include <limits>
+#include <algorithm>
+#include <random>
+#include <set>
+#define EPS 0.00001
+
+struct Point // структура для хранения координат точки
+{ 
+    int x, y;
+};
+
+struct Color // структура для хранения цвета
+{ 
+    uint8_t r, g, b;
+};
+
+// Структура для точки с вещественными координатами (для точности)
+struct PointD 
+{
+    double x, y;
+    PointD(double x0 = 0, double y0 = 0) : x(x0), y(y0) {}
+
+    // Оператор сравнения для упорядочивания
+    bool operator<(const PointD& other) const 
+	{
+        	if (x < other.x) return true;
+        	if (x > other.x) return false;
+        	return y < other.y;
+    	}
+
+    // Оператор равенства
+    bool operator==(const PointD& other) const 
+	{
+        	return std::abs(x - other.x) < 1e-6 && std::abs(y - other.y) < 1e-6;
+    	}
+};
+
+struct Triangle //структура хранения треугольников, нужна для триангуляции Делоне
+{
+    PointD a, b, c;
+    Triangle(PointD a0, PointD b0, PointD c0) : a(a0), b(b0), c(c0) {}
+
+    // Добавляем оператор сравнения
+    bool operator==(const Triangle& other) const 
+	{
+        return (a == other.a && b == other.b && c == other.c) ||
+            (a == other.a && b == other.c && c == other.b) ||
+            (a == other.b && b == other.a && c == other.c) ||
+            (a == other.b && b == other.c && c == other.a) ||
+            (a == other.c && b == other.a && c == other.b) ||
+            (a == other.c && b == other.b && c == other.a);
+    	}
+};
+
+struct Edge     //структура хранения ребер. также нужна для триангуляции  и поиска пути
+{
+    PointD a, b;
+    Edge(PointD a0, PointD b0) : a(a0), b(b0) {}
+
+    // Оператор сравнения на равенство
+    bool operator==(const Edge& other) const 
+	{
+        	return (a == other.a && b == other.b) || (a == other.b && b == other.a);
+    	}
+
+    // Оператор сравнения для упорядочивания (если нужно для std::set)
+    bool operator<(const Edge& other) const 
+	{
+        	return std::tie(a, b) < std::tie(other.a, other.b);
+    	}
+};
+
+
+class Controllog //класс для записи лога control
+{ 
+    std::ofstream  controllog;  
+    bool log_on; 
+public:
+    Controllog() : log_on(false) {}
+
+	~Controllog()  //деструктор для того, чтобы при завершении программы файл закрывался
+	{
+        	if (controllog.is_open()) 
+		{
+            		controllog.close();
+        	}
+    	}
+
+ void switchlog() //функция для включения записи лога
+	{ 
+        	log_on = true;
+		controllog.open("controllog.txt", std::ios::app);
+        }
+    void log(const std::string& line) //сама функция записи лога
+	{ 
+        	if (log_on && controllog.is_open()) 
+		{
+            		controllog << current_time() << " - " << line << std::endl;
+        	}
+    	}
+
+    std::string current_time() {  //функция для записи времени в логе
+        std::time_t t = std::time(nullptr);
+        std::tm* now = std::localtime(&t);
+        std::ostringstream oss;
+        oss << std::put_time(now, "%d.%m.%Y %H:%M:%S");
+        return oss.str();
+    }
+};
+
+
+
+class Interfacelog  //аналогичный класс для лога interface
+{ 
+    std::ofstream interfacelog;  
+    bool log_on; 
+public:
+    Interfacelog() : log_on(false) {}
+
+	~Interfacelog() 
+	{
+        	if (interfacelog.is_open()) 
+		{
+            		interfacelog.close();
+        	}
+    	}
+
+	void switchlog()
+	{ 
+        	log_on = true;
+		interfacelog.open("interfacelog.txt", std::ios::app);
+        }
+    
+    void log(const std::string& line) 
+	{ 
+        	if (log_on && interfacelog.is_open()) 
+		{
+            		interfacelog << current_time() << " - " << line << std::endl;
+        	}
+    	}
+
+    std::string current_time() { 
+        std::time_t t = std::time(nullptr);
+        std::tm* now = std::localtime(&t);
+        std::ostringstream oss;
+        oss << std::put_time(now, "%d.%m.%Y %H:%M:%S");
+        return oss.str();
+    }
+};
+
+
+class Component     // Класс, хранящий все компоненты в нужном нам срезе
+{ 
+public:
+    std::vector<std::vector<double>> comp;
+    //параметры связной компоненты
+    	int xmin;   //описывающий компоненты прямоугольник
+	int xmax;
+	int ymin;
+	int ymax;
+	double xres;  //центр тяжести
+	double yres;
+	double value1;   //собственные значения
+	double value2;
+	double vector1_x;   //факторы
+	double vector2_x;
+	double vector1_y;
+	double vector2_y;;
+
+    Component(const std::vector<std::vector<double>>& inpcomp) : comp(inpcomp) {}
+
+    Component(int A, int B) 
+	{
+        	comp.resize(A, std::vector<double>(B, 255));
+    	}
+
+    void findparameters()  //поиск параметров компоненты
+	{
+        	// Находим границы и центр
+        	xmin=std::numeric_limits<int>::max();
+        	xmax=std::numeric_limits<int>::min();
+		ymin=std::numeric_limits<int>::max();
+        	ymax=std::numeric_limits<int>::min();
+        	double xsum=0;
+		double ysum=0;
+        	int count=0;
+        	for (int i=0; i<int(comp.size()); ++i) 
+		{
+            	for (int j=0; j<int(comp[0].size()); ++j) 
+			{
+                		if (abs(comp[i][j])<EPS) 
+				{ // Точка принадлежит компоненте
+                    			xmin=std::min(xmin,i);
+                   	 		ymin=std::min(ymin,j);
+                    			xmax=std::max(xmax,i);
+                    			ymax=std::max(ymax,j);
+                    			xsum +=i;
+                    			ysum +=j;
+                    			count++;
+                		}
+            		}
+        	}
+       		xres=xsum/count;
+        	yres=ysum/count;
+        	
+		// Расчет ковариационной матрицы
+        	double cov_xx=0;
+ 		double cov_xy=0;
+		double cov_yy=0;
+        	for (int i=xmin; i<=xmax; ++i) 
+		{
+            		for (int j=ymin; j<=ymax; ++j) 
+			{
+                		if (abs(comp[i][j])<EPS) 
+				{
+                    			double dx=i-xres;
+                    			double dy=j-yres;
+                    			cov_xx +=dx*dx;
+                    			cov_xy +=dx*dy;
+                    			cov_yy +=dy*dy;
+                		}
+            		}
+        	}
+        	cov_xx/=count;
+        	cov_xy/=count;
+        	cov_yy/=count;
+
+        	// Собственные значения и векторы
+        	double trace=cov_xx+cov_yy;
+        	double det=cov_xx*cov_yy-cov_xy*cov_xy;
+        	value1=(trace+sqrt(trace*trace-4*det))/2;
+        	value2=(trace-sqrt(trace*trace-4*det))/2;
+
+        	// Собственные векторы (упрощенный расчет)
+        	if (abs(cov_xy)>EPS) 
+		{
+            		vector1_x=value1-cov_yy;
+            		vector1_y=cov_xy;
+            		vector2_x=value2-cov_yy;
+            		vector2_y=cov_xy;
+        	}
+        	else {
+            		vector1_x=1;
+            		vector1_y=0;
+            		vector2_x=0;
+            		vector2_y=1;
+        	}
+
+    	}
+
+};
+
+
+class Gauss  // Класс, хранящий Гауссы с параметрами
+{ 
+public:
+    double x,y,sigma_x,sigma_y,h;
+    Gauss(double x, double y, double sigma_x, double sigma_y, double h)
+        : x(x), y(y), sigma_x(sigma_x), sigma_y(sigma_y), h(h) {}
+
+     double gaussvalue(int a, int b) const  //расчет значения конкретного Гаусса в точке а,б
+	{  
+		double value;
+        	double dx=a-x;
+        	double dy=b-y;
+        	double denom_x=2*sigma_x*sigma_x;
+        	double denom_y=2*sigma_y*sigma_y;
+        
+        	if((fabs(denom_x)<EPS)||(fabs(denom_x)<EPS))
+		{
+            		std::cerr << "Error: sigma_x or sigma_y =0" << std::endl;
+            		return 0;
+        	}
+
+        	double exponent=-((dx*dx)/denom_x+(dy*dy)/denom_y);
+
+        	if (exponent<-700) return 0;
+        	else if (exponent>700) return std::numeric_limits<double>::infinity();
+        	return h*exp(exponent);
+    	}
+};
+
+class Field    //Класс поле
+{ 
+public:
+    int xfield,yfield;   //длина и ширина поля
+    std::vector<std::vector<double>> pixels;   //значения пикселей в точках поля
+    std::vector<std::vector<double>> norma;    //вспомогательный объект, нужен для выравнивания значений в функции norm
+    std::vector<std::vector<Color>> colors;    //цвета пикселей
+    int xmin;                //параметры связной компоненты (нужно, чтобы нарисовать компоненту на поле
+    int xmax;
+    int ymin;
+    int ymax;
+    double xres;
+    double yres;
+    double value1;
+    double value2;
+    double vector1_x;
+    double vector1_y;
+    double vector2_x;
+    double vector2_y;
+    
+
+    Field(int xfield, int yfield) : xfield(xfield), yfield(yfield)    //конструктор поля
+	{
+        	pixels.resize(xfield, std::vector<double>(yfield, 0));    
+		norma.resize(xfield, std::vector<double>(yfield, 0));
+        	colors.resize(xfield, std::vector<Color>(yfield, { 0, 0, 0 }));
+    	}
+
+    void setgauss(const Gauss& gauss)     //расчет значений на поле для конкретного Гаусса
+	{ 
+        	double value;
+        	for (int a=0; a<xfield; ++a) 
+		{
+            		for (int b=0; b<yfield; ++b) 
+			{
+                		value = gauss.gaussvalue(a,b);
+                		pixels[a][b]+=value*gauss.h; 
+				norma[a][b]+=gauss.h; 
+                	}
+        	}
+    	}
+
+    void norm()   // функция выравнивания значений (чтобы не получились слишком большими)
+	{
+		for (int a=0; a<xfield; ++a) 
+		{
+            		for (int b=0; b<yfield; ++b) 
+			{
+                		if(norma[a][b]>0)
+				{
+					pixels[a][b]/=norma[a][b];
+				}	
+                	}
+        	}
+	}
+    
+
+
+
+    void drawTriangles(const std::vector<Triangle>& triangles)  //функция для визуализации треугольников и триангуляции
+	{
+        	Color lineColor = {0,0,255};
+        	for (const auto& tri : triangles) {
+            draw_line(tri.a.x, tri.a.y, tri.b.x, tri.b.y, lineColor);
+            draw_line(tri.b.x, tri.b.y, tri.c.x, tri.c.y, lineColor);
+            draw_line(tri.c.x, tri.c.y, tri.a.x, tri.a.y, lineColor);
+        }
+    }
+
+
+    void gnuplot(const std::string& filename)    // Функция сохранения гнуплота
+	{ 
+        	std::ofstream file(filename);
+        	for (int i = 0; i < xfield; ++i) 
+		{
+            		for (int j = 0; j < yfield; ++j) 
+			{
+                		file << i << " " << j << " " << pixels[i][j] << std::endl;
+            		}
+            		file << std::endl;
+        	}
+        	file.close();
+    	}
+
+    void wBMP(const std::string& filename, int k) //запись поля в BMP файл
+	{ 
+        	const int BMP_HEADER_SIZE = 54;
+        	const int PIXEL_SIZE = 3;
+        	int file_size = BMP_HEADER_SIZE + PIXEL_SIZE * xfield * yfield;
+
+        	unsigned char bmp_header[BMP_HEADER_SIZE] = { 0 };
+
+        	// Заголовок BMP файла
+        	bmp_header[0] = 'B';
+        	bmp_header[1] = 'M';
+        	bmp_header[2] = file_size & 0xFF;
+        	bmp_header[3] = (file_size >> 8) & 0xFF;
+       		bmp_header[4] = (file_size >> 16) & 0xFF;
+        	bmp_header[5] = (file_size >> 24) & 0xFF;
+        	bmp_header[10] = BMP_HEADER_SIZE;
+
+        	// Заголовок DIB
+        	bmp_header[14] = 40; // Размер заголовка DIB
+        	bmp_header[18] = yfield & 0xFF;
+        	bmp_header[19] = (yfield >> 8) & 0xFF;
+        	bmp_header[20] = (yfield >> 16) & 0xFF;
+        	bmp_header[21] = (yfield >> 24) & 0xFF;
+        	bmp_header[22] = xfield & 0xFF;
+        	bmp_header[23] = (xfield >> 8) & 0xFF;
+        	bmp_header[24] = (xfield >> 16) & 0xFF;
+        	bmp_header[25] = (xfield >> 24) & 0xFF;
+        	bmp_header[26] = 1; // Число цветовых плоскостей
+        	bmp_header[28] = 24; // Количество бит на пиксель
+
+        	std::ofstream file(filename, std::ios::binary);
+        	file.write(reinterpret_cast<char*>(bmp_header), BMP_HEADER_SIZE);
+
+        	// Записываем пиксели (матрицу)
+        	if (k == 1)    //это для компоненты с факторами
+		{ 
+	
+
+            		// Первый вектор (красный)
+            		draw_line(xres, yres,
+                	xres + vector1_x * 100,
+                	yres + vector1_y * 100,
+                	{ 255, 0, 0 });
+
+            		// Второй вектор (синий)
+            		draw_line(xres, yres,
+                	xres + vector2_x * 100,
+                	yres + vector2_y * 100,
+                	{ 0, 0, 255 });
+
+            		for (int i = xfield - 1; i >= 0; --i) 
+			{
+                		for (int j = 0; j < yfield; ++j) 
+				{
+
+                    			if (colors[i][j].r != 0 || colors[i][j].g != 0 || colors[i][j].b != 0) 
+					{
+                        			unsigned char pixel[3] = { static_cast<unsigned char>(colors[i][j].r),
+                        			static_cast<unsigned char>(colors[i][j].g),
+                        			static_cast<unsigned char>(colors[i][j].b) };
+                        			file.write(reinterpret_cast<char*>(pixel), PIXEL_SIZE);
+                    			}
+
+                    			else {
+
+                        			int value = static_cast<int>(pixels[i][j] * 100); // Умножаю на коэффициент 100, чтобы отображалось красиво и ярко
+                        			unsigned char pixel[3] = { static_cast<unsigned char>(std::min(std::max(value, 0), 255)),
+                                                static_cast<unsigned char>(std::min(std::max(value, 0), 255)),
+                                                static_cast<unsigned char>(std::min(std::max(value, 0), 255)) };
+                        			file.write(reinterpret_cast<char*>(pixel), PIXEL_SIZE);
+                    				}
+
+                		}
+            		}
+        	}
+
+        if (k == 2) //Для ч\б картинки
+	{ 
+            	for (int i = xfield - 1; i >= 0; --i) 
+		{
+                	for (int j = 0; j < yfield; ++j) 
+			{
+
+                    		int value = static_cast<int>(pixels[i][j] * 100); // Умножаю на коэффициент 100, чтобы отображалось красиво и ярко
+                    		unsigned char pixel[3] = { static_cast<unsigned char>(std::min(std::max(value, 0), 255)),
+                                            static_cast<unsigned char>(std::min(std::max(value, 0), 255)),
+                                            static_cast<unsigned char>(std::min(std::max(value, 0), 255)) };
+                    		file.write(reinterpret_cast<char*>(pixel), PIXEL_SIZE);
+
+                	}
+            	}
+
+
+        	}
+
+        else //для разукраски класстеров
+	{ 
+            for (int i = xfield - 1; i >= 0; --i) 
+		{
+                	for (int j = 0; j < yfield; ++j) 
+			{
+                    		unsigned char pixel[3] = { static_cast<unsigned char>(colors[i][j].r),
+                                               static_cast<unsigned char>(colors[i][j].g),
+                                               static_cast<unsigned char>(colors[i][j].b) };
+                    		file.write(reinterpret_cast<char*>(pixel), PIXEL_SIZE);
+                	}
+            	}
+        }
+
+        file.close();
+    }
+
+    void draw_line(int x1, int y1, int x2, int y2, Color color) //красит прямую между двумя точками в заданный цвет
+	{
+        	int dx = abs(x2 - x1);
+        	int dy = abs(y2 - y1);
+        	int sx = (x1 < x2) ? 1 : -1;
+        	int sy = (y1 < y2) ? 1 : -1;
+        	int err = dx - dy;
+
+        	while (true) 
+		{
+            		if (x1 >= 0 && x1 < xfield && y1 >= 0 && y1 < yfield) 
+			{
+                		colors[x1][y1] = color;
+            		}
+
+            		if (x1 == x2 && y1 == y2) break;
+            		int e2 = 2 * err;
+            		if (e2 > -dy) 
+			{
+                		err -= dy;
+                		x1 += sx;
+            		}
+            		if (e2 < dx) 
+			{
+                		err += dx;
+                		y1 += sy;
+            		}
+        	}
+    	}
+
+    std::pair<int, int> bmp_read(const std::string& filename) { // Чтение BMP. Узнаем размер поля и инициализируем его.
+
+        std::ifstream bmp_file(filename, std::ios::binary);
+
+        if (!bmp_file) {
+            std::cerr << "Failed to open BMP file: " << filename << std::endl;
+            return { 0,0 };
+        }
+
+        unsigned char header[54];
+        bmp_file.read(reinterpret_cast<char*>(header), 54);
+
+        if (header[0] != 'B' || header[1] != 'M') {
+            std::cerr << "Invalid BMP file:" << filename << std::endl;
+            return { 0,0 };
+        }
+
+        int width = header[18] | (header[19] << 8) | (header[20] << 16) | (header[21] << 24);
+        int height = header[22] | (header[23] << 8) | (header[24] << 16) | (header[25] << 24);
+
+        return { height, width };
+    }
+
+    void load_data(std::ifstream& bmp_file, int length, int width) { // Чтение BMP. Выгружаем информацию в матрицу.
+        for (int i = length - 1; i >= 0; --i) {
+            for (int j = 0; j < width; j++) {
+                unsigned char color = bmp_file.get();
+                bmp_file.get();
+                bmp_file.get();
+                pixels[i][j] = color;
+            }
+            bmp_file.ignore((4 - (width * 3) % 4) % 4);
+        }
+    }
+
+    void copyFromBMP(const std::string& filename) {
+        auto dimensions = bmp_read(filename);
+        if (dimensions.first == 0 || dimensions.second == 0) return;
+
+        std::ifstream bmp_file(filename, std::ios::binary);
+        bmp_file.ignore(54);
+        load_data(bmp_file, dimensions.first, dimensions.second);
+        bmp_file.close();
+    }
+};
+
+
+
+class Analyz //класс работы со связными компонентами, триангуляцией и поиском пути
+{ 
+
+private:
+    int xfield,yfield;              //размеры поля
+    Field trifield{ 0,0 };          //поле для триангуляции
+    std::vector<std::vector<double>> AnalyzField;    //вспомогательное поле
+    std::vector<Component> components;                //список компонент
+    int count = 0;
+
+
+
+
+    std::vector<Triangle> helpTriangles(const std::vector<PointD>& points)  //триангуляция Делоне Хпоиск нужных треугольников
+	{
+        	std::vector<Triangle> triangles;
+        	if (points.empty()) return triangles;
+
+        	// Создаем супер-треугольни (самый большой, с которого и начнется триангуляция)
+        	double minX = points[0].x, maxX = points[0].x;
+        	double minY = points[0].y, maxY = points[0].y;
+        	for (const auto& p : points) 
+		{
+            		minX = std::min(minX, p.x); maxX = std::max(maxX, p.x);
+            		minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
+        	}
+
+        	double dx = (maxX - minX) * 10, dy = (maxY - minY) * 10;
+        	PointD p1(minX - dx, minY - dy);     //точки этого треугольника
+        	PointD p2(maxX + dx, minY - dy);
+        	PointD p3((minX + maxX) / 2, maxY + dy);
+        	triangles.emplace_back(p1, p2, p3);
+
+        	// Добавляем точки
+        	for (const auto& p : points) 
+		{
+            		std::vector<Triangle> badTriangles;
+            		for (const auto& tri : triangles) 
+			{
+                		if (isPointInCircumcircle(p, tri)) 
+				{
+                    			badTriangles.push_back(tri);
+                		}
+            		}
+
+            		std::vector<Edge> polygon;
+            		for (const auto& tri : badTriangles) 
+			{
+                		std::vector<Edge> edges = { {tri.a, tri.b}, {tri.b, tri.c}, {tri.c, tri.a} };
+                		for (const auto& edge : edges) 
+				{
+                    			bool isShared = false;
+                    			for (const auto& other : badTriangles) 
+					{
+                        			if (&tri == &other) continue;
+                        			if (otherHasEdge(other, edge)) isShared = true;
+                    			}
+                   			if (!isShared) polygon.push_back(edge);
+                		}
+            		}
+
+            		// Удаляем плохие треугольники
+            		triangles.erase(std::remove_if(triangles.begin(), triangles.end(),
+                	[&](const Triangle& t) { return std::find(badTriangles.begin(), badTriangles.end(), t) != badTriangles.end(); }),
+                	triangles.end());
+
+            		// Добавляем новые
+            		for (const auto& edge : polygon) 
+			{
+                		triangles.emplace_back(edge.a, edge.b, p);
+            		}
+        	}
+
+        	triangles.erase(std::remove_if(triangles.begin(), triangles.end(),
+            	[&](const Triangle& t) {
+                return contains(t, p1) || contains(t, p2) || contains(t, p3);
+            	}), triangles.end());
+
+        	return triangles;
+    	}
+
+    bool isPointInCircumcircle(const PointD& p, const Triangle& tri) //флаг проверки, что точка попала в описанную окружность
+	{
+        	double ax = tri.a.x - p.x, ay = tri.a.y - p.y;
+        	double bx = tri.b.x - p.x, by = tri.b.y - p.y;
+        	double cx = tri.c.x - p.x, cy = tri.c.y - p.y;
+
+        	double det = ax * (by * (cx * cx + cy * cy) - cy * (bx * bx + by * by))
+            	- ay * (bx * (cx * cx + cy * cy) - cx * (bx * bx + by * by))
+            	+ (ax * ax + ay * ay) * (bx * cy - by * cx);
+        	return det > 0;
+    	}
+
+    bool otherHasEdge(const Triangle& tri, const Edge& edge)   //флаг проверки на наличие в треугольнике заданного ребра
+	{
+        	return Edge(tri.a, tri.b) == edge ||
+            	Edge(tri.b, tri.c) == edge ||
+            	Edge(tri.c, tri.a) == edge;
+    	}
+
+    bool contains(const Triangle& tri, const PointD& p)     //флаг проверки на наличие в треугольнике заданной точки
+	{
+        	return tri.a == p || tri.b == p || tri.c == p;
+    	}
+
+    // Проверка попадания точки в компоненту
+    bool isPointInComponent(int x, int y) const 
+	{
+        	for (const auto& comp : components) 
+		{
+            		if (x >= comp.xmin && x <= comp.xmax && y >= comp.ymin && y <= comp.ymax) 
+			{
+                		if (abs(comp.comp[x][y]) < EPS) return true;
+            		}
+        	}
+        	return false;
+    	}
+
+    // Поиск кратчайшего пути (алгоритм A*)
+    std::vector<Point> findPath(const Point& start, const Point& end) {
+        std::vector<Point> path;
+        if (isPointInComponent(start.x, start.y) || isPointInComponent(end.x, end.y)) {
+            return path; // Путь невозможен
+        }
+
+        // Матрица посещенных точек
+        std::vector<std::vector<bool>> visited(xfield, std::vector<bool>(yfield, false));
+
+        // Очередь с приоритетом для A*
+        using Node = std::pair<int, Point>;
+        auto cmp = [](const Node& a, const Node& b) { return a.first > b.first; };
+        std::priority_queue<Node, std::vector<Node>, decltype(cmp)> pq(cmp);
+
+        // Матрица предыдущих точек
+        std::vector<std::vector<Point>> came_from(xfield, std::vector<Point>(yfield));
+
+        // Эвристика (манхэттенское расстояние)
+        auto heuristic = [](Point a, Point b) {
+            return abs(a.x - b.x) + abs(a.y - b.y);
+            };
+
+        pq.push({ heuristic(start, end), start });
+        visited[start.x][start.y] = true;
+
+        const int dx[8] = { 1, -1, 0, 0, -1, 1, 1, -1 };
+        const int dy[8] = { 0, 0, 1, -1, -1, 1, -1, 1 };
+
+        while (!pq.empty()) {
+            auto current = pq.top().second;
+            pq.pop();
+
+            if (current.x == end.x && current.y == end.y) {
+                // Восстановление пути
+                while (!(current.x == start.x && current.y == start.y)) {
+                    path.push_back(current);
+                    current = came_from[current.x][current.y];
+                }
+                path.push_back(start);
+                std::reverse(path.begin(), path.end());
+                return path;
+            }
+
+            for (int i = 0; i < 8; ++i) {
+                Point neighbor{ current.x + dx[i], current.y + dy[i] };
+
+                if (neighbor.x >= 0 && neighbor.y >= 0 &&
+                    neighbor.x < xfield && neighbor.y < yfield &&
+                    !visited[neighbor.x][neighbor.y] &&
+                    !isPointInComponent(neighbor.x, neighbor.y)) {
+
+                    visited[neighbor.x][neighbor.y] = true;
+                    came_from[neighbor.x][neighbor.y] = current;
+                    int priority = heuristic(neighbor, end);
+                    pq.push({ priority, neighbor });
+                }
+            }
+        }
+
+        return path; // Путь не найден
+    }
+
+    // Проверка пересечения двух отрезков
+    bool doSegmentsIntersect(const PointD& p1, const PointD& p2, const PointD& p3, const PointD& p4) 
+	{
+        	auto ccw = [](const PointD& a, const PointD& b, const PointD& c) 
+		{
+            		return (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x);
+            	};
+
+        	return ccw(p1, p3, p4) != ccw(p2, p3, p4) && ccw(p1, p2, p3) != ccw(p1, p2, p4);
+    	}
+
+    // Вычисление угла между двумя отрезками в точке пересечения
+    double calculateIntersectionAngle(const PointD& p1, const PointD& p2,
+        const PointD& p3, const PointD& p4) 
+	{
+        
+        	double v1x = p2.x - p1.x;    //первый вектор
+        	double v1y = p2.y - p1.y;
+        	double v2x = p4.x - p3.x;    //второй вектор
+        	double v2y = p4.y - p3.y;
+        	double dot = v1x * v2x + v1y * v2y;   //важные характеристики
+        	double det = v1x * v2y - v1y * v2x;
+        	return atan2(det, dot);      //угол между векторами
+    	}
+
+public:
+
+    int Radius = 0;     //радиус машинки, дляя которой ищем путь
+    void radius(int r) 
+	{
+        	Radius = r;
+    	}
+
+    void Bin(int h, Field& field) // Функция для получения разреза на высоте h
+	{
+        	AnalyzField.resize(field.pixels.size(), std::vector<double>(field.pixels[0].size(), 0));
+        	xfield = field.pixels.size();
+        	yfield = field.pixels[0].size();
+
+        	for (int i = xfield - 1; i >= 0; --i) 
+		{
+            		for (int j = 0; j < yfield; ++j) 
+			{
+                		if (f.pixels[i][j] < h) 
+				{
+                    			AnalyzField[i][j] = 255;
+                		}
+                		else {
+                    			AnalyzField[i][j] = 0;
+                		}
+            		}
+        	}
+        	Field pole(field.xfield, field.yfield);
+       		pole.pixels = AnalyzField;
+        	pole.wBMP("cut.bmp", 2);   //срез записан в BMP
+        	trifield = pole;   //инициализация поля для триангуляции
+    }
+
+    const std::vector<Component>& getComponents() const 
+	{
+        	return components;
+    	}
+
+    size_t wave(int n) //функция Wave типа size_t, чтобы заодно узнать количество компонент
+	{ 
+        	Component Componenta(xfield, yfield);
+        	int k = 0; // Тут будет записано значение count
+
+        	for (int i = xfield - 1; i >= 0; --i) 
+		{
+            		for (int j = 0; j < yfield; ++j) 
+			{
+                		k = burn(Componenta.comp, i, j);
+
+                		if (k > n) 
+				{
+                    			components.emplace_back(Componenta);
+                    			components.back().findparameters();
+                    			Componenta = Component(xfield, yfield);
+                		}
+
+                		else if (k > 0 && k < n) {
+                    			Componenta = Component(xfield, yfield);
+                		}
+
+                		count = 0;
+
+            		}
+        	}
+
+        	for (int i = 0; i < (int)components.size(); i++) 
+		{
+            		Field compole(xfield, yfield);             //передаем параметры связной компоненты, чтобы нарисовать ее
+            		compole.pixels = components[i].comp;
+            		compole.colors.resize(xfield, std::vector<Color>(yfield, { 255, 255, 255 }));
+            		compole.xres = components[i].xres;
+            		compole.yres = components[i].yres;
+            		compole.vector1_x = components[i].vector1_x;
+            		compole.vector1_y = components[i].vector1_y;
+            		compole.vector2_x = components[i].vector2_x;
+            		compole.vector2_y = components[i].vector2_y;
+            		compole.value1 = components[i].value1;
+            		compole.value2 = components[i].value2;
+            		compole.wBMP(std::to_string(i + 1) + "component.bmp", 1);
+        	}
+
+        	// Обновляем cleanedField, оставляя только значимые компоненты
+        	trifield.pixels.assign(trifield.pixels.size(),
+            	std::vector<double>(trifield.pixels[0].size(), 255.0));
+        	for (const auto& comp : components) 
+		{
+            		for (size_t i = 0; i < comp.comp.size(); ++i) 
+			{
+                		for (size_t j = 0; j < comp.comp[0].size(); ++j) 
+				{
+                    			if (abs(comp.comp[i][j]) < EPS) 
+					{
+                        			trifield.pixels[i][j] = 0.0;
+                    			}
+                		}
+            		}
+        	}
+		return components.size();
+    	}
+    
+
+
+    int burn(std::vector<std::vector<double>>& component, int startX, int startY) //сама рекурсивная функция поджога
+	{
+        	// Проверка валидности начальной точки
+        	if (startX < 0 || startY < 0 ||
+            	startX >= int(component.size()) ||
+            	startY >= int(component[0].size()) ||
+            	int(AnalyzField[startX][startY]) == 255) {
+            		return 0;
+        	}
+
+        	std::queue<std::pair<int, int>> q;
+        	q.push(std::make_pair(startX, startY));
+        	AnalyzField[startX][startY] = 255;
+        	component[startX][startY] = 0;
+        	int count = 1;
+
+        	// Смещения для 8 соседей
+        	const int dx[8] = { 1, -1, 0, 0, -1, 1, 1, -1 };
+        	const int dy[8] = { 0, 0, 1, -1, -1, 1, -1, 1 };
+
+        	while (!q.empty()) 
+		{
+            		int x = q.front().first;
+            		int y = q.front().second;
+            		q.pop();
+
+            		for (int i = 0; i < 8; ++i) 
+			{
+                		int nx = x + dx[i];
+                		int ny = y + dy[i];
+
+                		if (nx >= 0 && ny >= 0 &&
+                    		nx < int(component.size()) &&
+                    		ny < int(component[0].size()) &&
+                    		int(AnalyzField[nx][ny]) != 255) {
+                    		AnalyzField[nx][ny] = 255;
+                    		component[nx][ny] = 0;
+                    		count++;
+                    		q.push(std::make_pair(nx, ny));
+                		}
+            		}
+        	}
+
+        	return count;
+    	}
+
+
+    std::vector<Color> setColor(int k)   //Генерируем свой цвет для каждого получившегося класстера
+	{ 
+        	std::vector<Color> colors;
+        	std::random_device rd;
+        	std::mt19937 gen(rd());
+        	std::uniform_int_distribution<int> dis(0, 255);
+
+        	for (int i = 0; i < k; i++) 
+		{
+            		colors.push_back({ static_cast<uint8_t>(dis(gen)),
+                              static_cast<uint8_t>(dis(gen)),
+                              static_cast<uint8_t>(dis(gen)) });
+        	}
+
+        	return colors;
+    	}
+
+    void kMeans(int k, int p) // Алгоритм kMeands с ядрами
+	{ 
+
+        	//Первый этап: стандартный kMeans для поиска кластеров
+        	std::vector<Point> points;
+
+        	for (const auto& comp : components) 
+		{
+            		for (int i = 0; i < xfield; i++) 
+			{
+                		for (int j = 0; j < yfield; j++) 
+				{
+                    			if (abs(comp.comp[i][j]) < EPS) 
+					{
+                        			points.push_back({ i, j }); // Вытаскиваем точки из разреза
+                    			}
+                		}
+            		}
+        	}
+
+        	if (points.empty()) //если вдруг ничего не нашли
+		{ 
+            		std::cerr << "No points available for clustering!" << std::endl;
+            		return;
+        	}
+
+        	std::vector<Point> centroids;
+        	std::random_device rd;
+        	std::mt19937 gen(rd());
+        	std::uniform_int_distribution<> dis_x(0, xfield - 1);
+        	std::uniform_int_distribution<> dis_y(0, yfield - 1);
+
+        	for (int i = 0; i < k; i++) 
+		{
+            		centroids.push_back({ dis_x(gen), dis_y(gen) }); // Рандомно выбираем k центроид
+        	}
+
+        	bool changed = true;
+        	std::vector<int> labels(points.size(), -1);
+
+        	while (changed) 
+		{
+            		changed = false;
+
+            		//Шаг 1: назначаем каждую точку ближайшему центроиду
+            		for (size_t i = 0; i < points.size(); i++) 
+			{
+                		double minDist = std::numeric_limits<double>::max();
+                		int cluster = -1;
+
+                		for (int j = 0; j < k; j++) 
+				{ //Считаем расстояние от точки до каждого класстера, выбираем среди них минимальное
+                    		double dist = std::pow(points[i].x - centroids[j].x, 2) + std::pow(points[i].y - centroids[j].y, 2);
+                    		if (dist < minDist) 
+				{
+                        		minDist = dist;
+                        		cluster = j;
+                    		}
+                	}
+
+                	if (labels[i] != cluster) 
+			{ //Проверяем, поменяла хоть одна точка класстер
+                    		labels[i] = cluster; // Если поменяла, то меняем ее класстер
+                    		changed = true;
+                	}
+            	}
+
+            	//Шаг 2: пересчитываем центроиды
+            	std::vector<Point> newCentroids(k, { 0, 0 });
+            	std::vector<int> counts(k, 0);
+
+            	for (size_t i = 0; i < points.size(); i++) 
+		{ // Для каждой центроиды складываем все координаты точек, вычисляем количество точек в них
+                	newCentroids[labels[i]].x += points[i].x;
+                	newCentroids[labels[i]].y += points[i].y;
+                	counts[labels[i]]++;
+            	}
+
+            	for (int j = 0; j < k; j++) 
+		{
+                	if (counts[j] > 0) 
+			{
+                    		newCentroids[j].x /= counts[j];
+                    		newCentroids[j].y /= counts[j];
+                	}
+            	}
+
+            	centroids = newCentroids;
+
+        	}
+
+        	std::vector<Color> clusterColors = setColor(k); //Генерируем цвета для кластеров
+        	std::vector<std::vector<Color>> clusterImage(xfield, std::vector<Color>(yfield, { 255, 255, 255 })); //Заополняем матрицу цветов каждого пикселя
+        	std::vector<std::vector<Point>> clusteredPoints(k);
+
+        	for (size_t i = 0; i < points.size(); i++) 
+		{ //Каждой точке -- свой цвет
+            		int cluster = labels[i];
+            		clusterImage[points[i].x][points[i].y] = clusterColors[cluster];
+            		clusteredPoints[cluster].push_back(points[i]); //Добвавляем каждую точку в свой кластер
+        	}
+
+        	// Второй этап: запуск kMeans для каждого из k кластеров с числом центроид p
+        	std::vector<std::vector<Point>> subCentroids(k);
+
+        	for (int clusterIdx = 0; clusterIdx < k; clusterIdx++) 
+		{ //Для каждого кластера выполняем алгоритм kMeans
+            		if (clusteredPoints[clusterIdx].empty()) continue;
+
+            		std::vector<Point>& clusterPoints = clusteredPoints[clusterIdx];
+            		std::vector<Point> subCenters(p);
+
+            		//Инициализируем p случайных центроид 
+            		for (int i = 0; i < p; i++) 
+			{
+                		subCenters[i] = clusterPoints[std::uniform_int_distribution<>(0, clusterPoints.size() - 1)(gen)];
+            		}
+
+            		bool subChanged = true;
+            		std::vector<int> subLabels(clusterPoints.size(), -1);
+
+            		while (subChanged) 
+			{
+                		subChanged = false;
+
+                		//Назначение точек 
+                		for (size_t i = 0; i < clusterPoints.size(); i++) 
+				{
+                    			double minDist = std::numeric_limits<double>::max();
+                    			int subCluster = -1;
+
+                    			for (int j = 0; j < p; j++) 
+					{
+                        			double dist = std::pow(clusterPoints[i].x - subCenters[j].x, 2) +
+                            			std::pow(clusterPoints[i].y - subCenters[j].y, 2);
+                        			if (dist < minDist) 
+						{
+                            				minDist = dist;
+                            				subCluster = j;
+                        			}
+                    			}
+
+                    			if (subLabels[i] != subCluster) 
+					{
+                        			subLabels[i] = subCluster;
+                        			subChanged = true;
+                    			}
+                		}
+
+                		//Пересчет субцентроид 
+               			std::vector<Point> newSubCenters(p, { 0, 0 });
+                		std::vector<int> subCounts(p, 0);
+
+                		for (size_t i = 0; i < clusterPoints.size(); i++) 
+				{
+                    			newSubCenters[subLabels[i]].x += clusterPoints[i].x;
+                    			newSubCenters[subLabels[i]].y += clusterPoints[i].y;
+                    			subCounts[subLabels[i]]++;
+                		}
+
+                		for (int j = 0; j < p; j++) 
+				{
+                    			if (subCounts[j] != 0) 
+					{
+                        			newSubCenters[j].x /= subCounts[j];
+                        			newSubCenters[j].y /= subCounts[j];
+                    			}
+                		}
+
+                		subCenters = newSubCenters;
+            		}
+            		subCentroids[clusterIdx] = subCenters;
+
+            		//Визуализация субцентроид 
+            		for (const auto& subCenter : subCenters) 
+			{
+                		clusterImage[subCenter.x][subCenter.y] = { 0, 0, 0 }; //Цвет для центров тяжести
+            		}
+        	}
+
+        	Field pole(xfield, yfield);
+        	pole.colors = clusterImage;
+        	pole.wBMP("clusters.bmp", 3);
+    	}
+
+
+    void triangulate(const std::string& filename)     //функция отрисовки триангуляции Делоне
+	{
+        	std::vector<PointD> centers;
+        	for (const auto& comp : components) 
+		{
+            		centers.emplace_back(comp.xres, comp.yres);
+        	}
+
+        	auto triangles = helpTriangles(centers);
+        	Color green = { 0, 255, 0 };
+
+        	for (const auto& tri : triangles) 
+		{
+            		trifield.draw_line(tri.a.x, tri.a.y, tri.b.x, tri.b.y, green);
+            		trifield.draw_line(tri.b.x, tri.b.y, tri.c.x, tri.c.y, green);
+            		trifield.draw_line(tri.c.x, tri.c.y, tri.a.x, tri.a.y, green);
+        	}
+
+        	trifield.wBMP(filename, 1);
+    	}
+
+
+    
+    // Метод для построения и отрисовки пути
+    void makeRoad(Field& field, const Point& start, const Point& end, const std::string& filename) {
+        try {
+            if (components.empty()) {
+                throw std::runtime_error("Нет компонент — триангуляция невозможна");
+            }
+
+            // 1. Проверка входных данных
+            if (field.xfield <= 0 || field.yfield <= 0) {
+                throw std::runtime_error("Invalid field dimensions");
+            }
+
+            // Проверка координат точек
+            auto check_point = [&](const Point& p, const std::string& name) {
+                if (p.x < 0 || p.x >= field.xfield || p.y < 0 || p.y >= field.yfield) {
+                    throw std::runtime_error(name + " point out of field bounds");
+                }
+                };
+            check_point(start, "Start");
+            check_point(end, "End");
+
+            // 2. Инициализация результата
+            Field resultField(field.xfield, field.yfield);
+
+            // Копируем исходное поле с компонентами
+            for (int i = 0; i < field.xfield; ++i) {
+                for (int j = 0; j < field.yfield; ++j) {
+                    resultField.colors[i][j] = { 255, 255, 255 }; // Белый фон
+                    // Копируем препятствия из исходного поля
+                    for (const auto& comp : components) {
+                        if (i < int(comp.comp.size()) && j < int(comp.comp[i].size()) && abs(comp.comp[i][j]) <EPS) {
+                            resultField.colors[i][j] = { 0, 0, 0 }; // Черные препятствия
+                        }
+                    }
+                }
+            }
+
+            // 3. Получение центров компонент
+            std::vector<PointD> centers;
+            for (const auto& comp : components) {
+                centers.emplace_back(comp.xres, comp.yres);
+            }
+
+            // 4. Триангуляция Делоне
+            auto triangles = helpTriangles(centers);
+            if (triangles.empty()) {
+                throw std::runtime_error("Triangulation failed");
+            }
+
+            // 5. Отрисовка триангуляции (серым цветом)
+            Color triangColor = { 200, 200, 200 }; // Серый цвет для триангуляции
+            for (const auto& tri : triangles) {
+                resultField.draw_line(tri.a.x, tri.a.y, tri.b.x, tri.b.y, triangColor);
+                resultField.draw_line(tri.b.x, tri.b.y, tri.c.x, tri.c.y, triangColor);
+                resultField.draw_line(tri.c.x, tri.c.y, tri.a.x, tri.a.y, triangColor);
+            }
+
+            // 6. Сбор уникальных рёбер и их середин
+            std::set<Edge> edgeSet;
+            std::vector<PointD> midPoints;
+            std::vector<Edge> allEdges; // Для визуализации пересекаемых рёбер
+
+            for (const auto& tri : triangles) {
+                Edge edges[3] = { {tri.a, tri.b}, {tri.b, tri.c}, {tri.c, tri.a} };
+                for (const auto& edge : edges) {
+                    if (edgeSet.insert(edge).second) {
+                        // Добавляем середину ребра
+                        midPoints.emplace_back(
+                            (edge.a.x + edge.b.x) / 2,
+                            (edge.a.y + edge.b.y) / 2
+                        );
+                        allEdges.push_back(edge);
+                    }
+                }
+            }
+
+            // 7. Функция проверки пересечения с препятствиями (улучшенная)
+            auto doesIntersectObstacle = [&](const PointD& p1, const PointD& p2) -> bool {
+                const int r = Radius;
+
+                for (int i = -r; i <= r; ++i) {
+                    for (int j = -r; j <= r; ++j) {
+                        if (i * i + j * j > r * r) continue;
+
+                        PointD offset1{ p1.x + i, p1.y + j };
+                        PointD offset2{ p2.x + i, p2.y + j };
+
+                        int x1 = static_cast<int>(offset1.x);
+                        int y1 = static_cast<int>(offset1.y);
+                        int x2 = static_cast<int>(offset2.x);
+                        int y2 = static_cast<int>(offset2.y);
+
+                        int dx = abs(x2 - x1);
+                        int dy = abs(y2 - y1);
+                        int sx = (x1 < x2) ? 1 : -1;
+                        int sy = (y1 < y2) ? 1 : -1;
+                        int err = dx - dy;
+
+                        while (true) {
+                            if (x1 >= 0 && x1 < field.xfield && y1 >= 0 && y1 < field.yfield) {
+                                for (const auto& comp : components) {
+                                    // Не локальная проверка по comp.comp[x][y], а глобальная — по координатам на всем поле
+                                    if (x1 >= comp.xmin && x1 <= comp.xmax &&
+                                        y1 >= comp.ymin && y1 <= comp.ymax) {
+                                        if (x1 < int(comp.comp.size()) && y1 < int(comp.comp[0].size()) &&
+                                            abs(comp.comp[x1][y1])<EPS) {
+                                            return true; // столкновение!
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (x1 == x2 && y1 == y2) break;
+
+                            int e2 = 2 * err;
+                            if (e2 > -dy) { err -= dy; x1 += sx; }
+                            if (e2 < dx) { err += dx; y1 += sy; }
+                        }
+                    }
+                }
+
+                return false;
+                };
+
+
+
+            // 8. Построение графа (узлы - середины рёбер + start + end)
+            PointD startD{ static_cast<double>(start.x), static_cast<double>(start.y) };
+            PointD endD{ static_cast<double>(end.x), static_cast<double>(end.y) };
+            midPoints.push_back(startD);
+            midPoints.push_back(endD);
+            const size_t startIdx = midPoints.size() - 2;
+            const size_t endIdx = midPoints.size() - 1;
+
+            // Матрица смежности
+            const size_t n = midPoints.size();
+            std::vector<std::vector<double>> adjMatrix(n, std::vector<double>(n, std::numeric_limits<double>::infinity()));
+
+            // Заполняем матрицу смежности
+            for (size_t i = 0; i < n; ++i) {
+                for (size_t j = i + 1; j < n; ++j) {
+                    if (!doesIntersectObstacle(midPoints[i], midPoints[j])) {
+                        // Вычисляем расстояние с учетом углов пересечения
+                        double dx = midPoints[j].x - midPoints[i].x;
+                        double dy = midPoints[j].y - midPoints[i].y;
+                        double dist = sqrt(dx * dx + dy * dy);
+
+                        // Учитываем угол пересечения с ребрами триангуляции
+                        for (const auto& edge : allEdges) {
+                            if (doSegmentsIntersect(midPoints[i], midPoints[j], edge.a, edge.b)) {
+                                // Находим угол между текущим отрезком и ребром триангуляции
+                                double angle = calculateIntersectionAngle(
+                                    midPoints[i], midPoints[j], edge.a, edge.b);
+                                // Штрафуем за отклонение от 90 градусов
+                                dist += abs(angle - M_PI / 2) * 0.1;
+                            }
+                        }
+
+                        adjMatrix[i][j] = adjMatrix[j][i] = dist;
+                    }
+                }
+            }
+
+            // 9. Алгоритм Дейкстры
+            std::vector<double> dist(n, std::numeric_limits<double>::infinity());
+            std::vector<size_t> prev(n, SIZE_MAX);
+            dist[startIdx] = 0;
+
+            auto cmp = [](const std::pair<double, size_t>& left, const std::pair<double, size_t>& right) {
+                return left.first > right.first;
+                };
+            std::priority_queue<std::pair<double, size_t>, std::vector<std::pair<double, size_t>>, decltype(cmp)> pq(cmp);
+            pq.push({ 0, startIdx });
+
+            while (!pq.empty()) {
+                auto current = pq.top();
+                pq.pop();
+                size_t u = current.second;
+
+                if (current.first > dist[u]) continue;
+
+                for (size_t v = 0; v < n; ++v) {
+                    double edgeWeight = adjMatrix[u][v];
+                    if (edgeWeight < std::numeric_limits<double>::infinity()) {
+                        double newDist = dist[u] + edgeWeight;
+                        if (newDist < dist[v]) {
+                            dist[v] = newDist;
+                            prev[v] = u;
+                            pq.push({ newDist, v });
+                        }
+                    }
+                }
+            }
+
+            // 10. Восстановление пути
+            if ( abs(dist[endIdx] - std::numeric_limits<double>::infinity())<EPS ) {
+                throw std::runtime_error("Path not found");
+            }
+
+            std::vector<PointD> path;
+            for (size_t at = endIdx; at != SIZE_MAX; at = prev[at]) {
+                path.push_back(midPoints[at]);
+                if (path.size() > n) break; // Защита от зацикливания
+            }
+            std::reverse(path.begin(), path.end());
+
+            // 11. Отрисовка пути (красным с толщиной 2 пикселя)
+            Color pathColor = { 255, 0, 0 }; // Красный цвет для пути
+            for (size_t i = 0; i < path.size() - 1; ++i) {
+                // Отрисовка с утолщением
+                resultField.draw_line(path[i].x, path[i].y, path[i + 1].x, path[i + 1].y, pathColor);
+                resultField.draw_line(path[i].x + 1, path[i].y, path[i + 1].x + 1, path[i + 1].y, pathColor);
+                resultField.draw_line(path[i].x, path[i].y + 1, path[i + 1].x, path[i + 1].y + 1, pathColor);
+            }
+
+            // 12. Отрисовка старта и финиша
+            auto draw_point = [&](int x, int y, Color color) {
+                for (int dx = -2; dx <= 2; ++dx) {
+                    for (int dy = -2; dy <= 2; ++dy) {
+                        if (abs(dx) + abs(dy) <= 2) { // Ромбик 5x5
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            if (nx >= 0 && nx < field.xfield && ny >= 0 && ny < field.yfield) {
+                                resultField.colors[nx][ny] = color;
+                            }
+                        }
+                    }
+                }
+                };
+
+            draw_point(start.x, start.y, { 0, 255, 0 }); // Зеленый старт
+            draw_point(end.x, end.y, { 0, 0, 255 });     // Синий финиш
+
+            // 13. Подсветка пересекаемых рёбер триангуляции (желтым)
+            Color highlightColor = { 255, 255, 0 }; // Желтый
+            for (size_t i = 0; i < path.size() - 1; ++i) {
+                for (const auto& edge : allEdges) {
+                    if (doSegmentsIntersect(path[i], path[i + 1], edge.a, edge.b)) {
+                        // Подсвечиваем ребро триангуляции, которое пересекает путь
+                        resultField.draw_line(edge.a.x, edge.a.y, edge.b.x, edge.b.y, highlightColor);
+                    }
+                }
+            }
+
+            // 14. Сохранение результата
+            resultField.wBMP(filename, 3);
+
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error in buildRoad: " << e.what() << std::endl;
+            throw;
+        }
+    }
+};
+
+
+class Control { // Класс Control выполняет роль диспетчера
+    std::vector<Gauss> list;    //список Гауссов
+    	Field* field;               //поле
+    	Analyz analyz;              //класс для функций Wave и kMeans
+	bool initial;               //флаг инициализации поля
+public:
+    Control() : field(nullptr), initial(false) {}
+    	Controllog controllog;              //класс для логов control
+
+    void controlWave(int n) { // Алгоритм wave
+
+        if (!initial) 
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("Wave failed: there is not any field");
+            		return;
+        	}
+		size_t size;
+		size=analyz.wave(n);
+		controllog.log("Wave alorithm has been completed with n= " + std::to_string(n) + " and with " + std::to_string(size) + " wavefields");
+    }
+
+    void controlTriangulate(const std::string& filename) 
+	{
+        if (!initial) {
+            controllog.log("Triangulation failed: there is not any field");
+            return;
+        }
+        analyz.triangulate(filename);
+        controllog.log("Triangulation saved in " + filename);
+    }
+
+    void controlinit(int x, int y)   //функция инициализации поля
+	{ 
+        	if (initial) 
+		{
+            		controllog.log("init failed, field has already been initialized");
+            		return;
+        	}
+        	field = new Field(x, y); 
+		initial=true;
+        	controllog.log("control.init(" + std::to_string(x) + " and " + std::to_string(y) + ") completed");
+       	}
+
+    void controlBin(int cut)           //функция Bin для среза по нужной высоте
+	{ 
+        	if (!initial) 
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("Bin failed: there is not any field");
+            		return;
+        	}
+        	analyz.Bin(cut, *field);
+        	controllog.log("Field is binarized with cut: " + std::to_string(cut) );
+    	}
+
+   void controlkMeans(int k, int p)            //закпуск алгоритма kMeans
+	{ 
+        	if(!initial)
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("kMeans failed: there is not any field");
+            		return;
+        	}
+		analyz.kMeans(k, p);
+		controllog.log("kMeans has been completed with k=" + std::to_string(k) + " p=" + std::to_string(p));
+    	}
+
+    void setnewgauss(double x,double y, double sigma_x, double sigma_y,double h)     //функция записи Гаусса с параметрами в список 
+	{
+        	list.emplace_back(x, y, sigma_x, sigma_y,h);
+		controllog.log("gauss with parameters x= " + std::to_string(x) + " y= " + std::to_string(y) + " sigma_x= " + std::to_string(sigma_x) + " sigma_y= " + std::to_string(sigma_y) + " h= " + std::to_string(h) + " added to list");
+        }
+
+
+   void generate()     //функция, располагающая гауссы из списка на поле 
+	{ 
+        	if (!initial) 
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("generate failed: there is not any field");
+            		return;
+        	}
+        	if (list.empty())
+		{
+           		controllog.log("No gausses have been added");
+            		return;
+        	}
+        	for (size_t i = 0; i < list.size(); ++i) 
+		{
+            		field->setgauss(list[i]);
+            		controllog.log("Gauss number " + std::to_string(i+1) + " has been put in");
+		}
+		field->norm();
+        	list.clear();
+        	controllog.log("All gausses in list have been put in");
+    	}
+
+    void controlgnuplot(const std::string& filename) { // Гнуплот
+        if (!initial) 
+		{
+            		std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("gnuplot failed: there is not any field");
+            		return;
+        	}
+        field->gnuplot("gnuplot_" + filename + ".txt");
+        controllog.log("Field saved to Gnuplot file: " + filename);
+
+        std::ofstream file("gnuplot_comm.txt");
+        file << "set view 60,30\n"; // угол в градусах по вертикальной и по горизонтальной оси
+        file << "set palette defined (0 \"blue\", 1 \"red\")\n";
+        file << "set pm3d at s\n";
+        file << "splot 'gnuplot_" << filename << ".txt' with lines\n";
+        file << "pause -1";
+        file.close();
+        controllog.log("Gnuplot file: " + filename + " has been generated");
+    }
+
+    void controlwBMP(const std::string& filename, int k) { //Запись BMP
+        if (!initial) {
+            std::cerr << "Field was not initialized" << std::endl;
+            		controllog.log("wBMP failed: there is not any field");
+            		return;
+        }
+        field->wBMP(filename, k);
+        controllog.log("Field saved to BMP file:" + filename);
+    }
+
+    void controlrBMP(const std::string& filename) { // Чтение BMP
+        if (!field) {
+            std::cerr << "Error! Field not initialized!" << std::endl;
+            controllog.log("Control received 'read bmp', but field was not initialized.");
+            return;
+        }
+
+        std::pair<int, int> dimensions = field->bmp_read(filename);
+        int new_length = dimensions.first;
+        int new_width = dimensions.second;
+
+        if (new_length == 0 || new_width == 0) {
+            std::cerr << "Error reading BMP file. No changes made" << std::endl;
+            controllog.log("Error reading BMP file");
+        }
+
+        delete field;
+        field = new Field(new_length, new_width);
+
+        std::ifstream bmp_file(filename, std::ios::binary);
+        bmp_file.ignore(54);
+        field->load_data(bmp_file, new_length, new_width);
+        bmp_file.close();
+
+        controllog.log("Field loaded bmp file:" + filename);
+    }
+
+    void controlmakeRoad(int x1, int y1, int x2, int y2) {
+        if (!initial) {
+            controllog.log("road failed: there is not any field");
+            return;
+        }
+
+        Point start{ x1, y1 };
+        Point end{ x2, y2 };
+
+        try {
+            // Проверка корректности координат
+            if (x1 < 0 || x1 >= field->xfield || y1 < 0 || y1 >= field->yfield ||
+                x2 < 0 || x2 >= field->xfield || y2 < 0 || y2 >= field->yfield) {
+                controllog.log("Incorrect start's or end's points");
+                std::cerr << "Error: points are incorrect" << std::endl;
+                return;
+            }
+
+            analyz.triangulate("roadtriangulation.bmp");
+            analyz.makeRoad(*field, start, end, "road.bmp");
+            controllog.log("road was made in file road.bmp");
+        } catch (const std::exception& e) {
+            controllog.log(std::string("error: ") + e.what());
+            std::cerr << "Error in makeRoad: " << e.what() << std::endl;
+        }
+    }
+
+    void controlradius(int r) {
+        analyz.radius(r);
+    }
+
+};
+
+
+class Myinterface          //класс интерфейса, который взаимодействует с пользователем
+{
+public:
+ void prog()               //функция - интерфейс 
+{
+	Control control;  //задаем класс управления
+	Interfacelog interfacelog;     //класс для логов интерфейса
+	std::string configname;
+	std::cout << "Enter your name of config-file" << std::endl;
+	std::cin >> configname;      // название конфиг-файла
+	std::ifstream config(configname);	
+	if (!config)
+	{
+		std::cerr << "Config file has not been opened" << std::endl;
+	}
+	std::string input;
+	std::string filename;
+	config >> input;
+	if (input == "file")
+	{
+		config >> filename;
+	}
+	std::string key;     //считывание ключей
+	std::string pause;   //batch_pause
+	std::string intlog;       //лог интерфейса
+	std::string contlog;    //лог сервера
+	int xfield,yfield,radius;     //заданные значения
+	double sigma_x_default,sigma_y_default,xdefault,ydefault,hdefault;
+        while (config >> key) 
+	{     //считывание ключей из конфига
+		if (key == "batch_pause") config >> pause;
+		else if (key == "interfacelog") config >> intlog;
+		else if (key == "controllog") config >> contlog;
+            	else if (key == "xfield") config >> xfield;
+            	else if (key == "yfield") config >> yfield;
+            	else if (key == "xdefault") config >> xdefault;
+            	else if (key == "ydefault") config >> ydefault;
+            	else if (key == "sigma_x_default") config >> sigma_x_default;
+            	else if (key == "sigma_y_default") config >> sigma_y_default;
+            	else if (key == "hdefault") config >> hdefault;
+		else if (key == "radius")
+		{
+			config >> radius;
+			control.controlradius(radius);
+		}
+        }
+	if (contlog=="ON")   //параметры для логирования интерфейса и сервера
+	{
+		control.controllog.switchlog();
+	}
+	if (intlog=="ON")
+	{	
+        	interfacelog.switchlog();
+	}
+    	
+	if (input == "file")     //работа с пользователем при вводе команд из файла 
+	{
+		std::string command;
+		std::ifstream batch(filename);
+		if (!batch)
+		{
+			std::cerr << "batch file has not been opened" << std::endl;
+		}
+        	while (true) 
+		{
+			if (pause=="ON")
+			{
+				std::cout << "Press enter to continue" << std::endl;
+                                std::cin.get();
+			}
+			batch >> command;
+			if (command == "init") 
+			{
+				int x,y;
+                		batch >> x ;
+				if(!x)
+				{
+					x=xfield;
+					interfacelog.log("x=xfield=" + std::to_string(x));
+				}
+				batch >> y ;
+				if(!x)
+				{
+					y=yfield;
+					interfacelog.log("y=yfield=" + std::to_string(y));
+				}
+				interfacelog.log("Command init with x= " + std::to_string(x) + " and y= " + std::to_string(y) + " sent to control");
+				control.controlinit(x,y);
+            		} 
+			else if (command == "gauss") 
+			{
+                		double sigma_x, sigma_y,x,y,h;
+				batch >> x;
+				if(!x)
+				{
+					x=xdefault;
+					interfacelog.log("x=xdefault=" + std::to_string(x));
+				}
+				batch >> y;
+				if(!y)
+				{
+					y=ydefault;
+					interfacelog.log("y=ydefault=" + std::to_string(y));
+				}
+				batch >> sigma_x;
+				if(!sigma_x)
+				{
+					sigma_x=sigma_x_default;
+					interfacelog.log("sigma_x=sigma_x_default=" + std::to_string(sigma_x));
+				}
+				batch >> sigma_y ;
+				if(!sigma_y)
+				{
+					sigma_y=sigma_y_default;
+					interfacelog.log("sigma_y=sigma_y_default=" + std::to_string(sigma_y));
+				}
+				batch >> h;
+				if(!h)
+				{
+					h=hdefault;
+					interfacelog.log("h=hdefault=" + std::to_string(h));
+				}
+				interfacelog.log("Command gauss with x= " + std::to_string(x) + " y= " + std::to_string(y) + " sigma_x= " + std::to_string(sigma_x) + " sigma_y= " + std::to_string(sigma_y) + " h= " + std::to_string(h) + " sent to control");
+                		control.setnewgauss(x, y, sigma_x, sigma_y, h);
+        		} 
+			else if (command == "generate") 
+			{
+				interfacelog.log("Command generate sent to control");
+                		control.generate();
+        		} 
+			else if (command == "gnuplot") 
+			{
+                		std::string savefile;
+                		batch >> savefile;
+				interfacelog.log("Command gnuplot with file " + savefile +  " sent to control");
+                		control.controlgnuplot(savefile);
+         		}
+			else if (command == "wBMP") 
+			{
+                		std::string savefileBMP;
+				int k;
+				batch >> savefileBMP;
+				batch >> k;
+				interfacelog.log("Command wBMP with file " + savefileBMP + "k=" + std::to_string(k) + " sent to control");
+                		control.controlwBMP(savefileBMP,k);
+         		}
+			else if (command == "rBMP") 
+			{
+                		std::string readfileBMP;
+				batch >> readfileBMP;
+				interfacelog.log("Command rBMP with file " + readfileBMP + " sent to control");
+                		control.controlrBMP(readfileBMP);
+         		}
+			else if (command == "BIN") 
+			{
+				int cut;
+				batch >> cut;                
+				interfacelog.log("Command BIN with cut= " + std::to_string(cut) + " sent to control");
+                		control.controlBin(cut);
+         		}
+			else if (command == "Wave") 
+			{
+				int n;
+				batch >> n;                
+				interfacelog.log("Command Wave with n= " + std::to_string(n) + " sent to control");
+                		control.controlWave(n);
+         		}
+			else if (command == "kMeans") 
+			{
+				int k;
+				batch >> k;
+				int p;
+				batch >> p;                
+				interfacelog.log("Command kMeans with k= " + std::to_string(k) + " p= " + std::to_string(p) + " sent to control");
+                		control.controlkMeans(k,p);
+			}
+			else if (command == "Triangulate") 
+			{
+				std::string triangulatefile;
+				batch >> triangulatefile;             
+				interfacelog.log("Command Triangulate in file " + triangulatefile + " sent to control");
+                		control.controlTriangulate(triangulatefile);
+			}
+			else if (command == "road") 
+			{
+				int x1,y1,x2,y2;
+                		batch >> x1;
+				batch >> y1;
+				batch >> x2;
+				batch >> y2;
+				interfacelog.log("Command road from point {" + std::to_string(x1) + ";" + std::to_string(y1) + "} to point {" + std::to_string(x2) + ";" + std::to_string(y2) + "} sent to control");
+                		control.controlmakeRoad(x1,y1,x2,y2);
+			}
+	    		else if (command == "away")
+	    		{		
+		    		interfacelog.log("end of batch file");
+				return;
+	    		}		
+         		else 
+	 		{
+               			std::cerr << "Error: wrong command.\n";
+				interfacelog.log("Wrong command in batch file");
+         		}
+     		}
+	}	
+
+	else if (input== "key")  //работа с пользователем, если ввод команд с клавиатуры
+	{
+        	std::string command;
+        	while (true) 
+		{
+            	std::cout << "Enter command (init - to create a field, gauss - to add Gauss, generate - to put Gauss on a field, gnuplot - to  draw field in gnuplot, wBMP - to write field to BMP file" << std::endl;
+		std::cout << "rBMP - to read field from BMP file, BIN - to make a cut, Wave - to do wave-algorithm, kMeans - do kMeans-algorithm, away - to exit)" << std::endl;
+            		std::cin >> command;
+            		if (command == "init") 
+			{
+				int x,y;
+                		std::cout << "Enter your size of field x";
+                		std::cin >> x ;
+				if(!x)
+				{
+					x=xfield;
+					interfacelog.log("x=xfield=" + std::to_string(x));
+				}
+				std::cout << "Enter your size of field y: ";
+                		std::cin >> y ;
+				if(!x)
+				{
+					y=yfield;
+					interfacelog.log("y=yfield=" + std::to_string(y));
+				}
+				interfacelog.log("Command init with x= " + std::to_string(x) + " and y= " + std::to_string(y) + " sent to control");
+				control.controlinit(x,y);
+            		} 
+			else if (command == "gauss") 
+			{
+                		double sigma_x, sigma_y,x,y,h;
+				std::cout << "Enter your x coordinate";
+				std::cin >> x;
+				if(!x)
+				{
+					x=xdefault;
+					interfacelog.log("x=xdefault= " + std::to_string(x));
+				}
+				std::cout << "Enter your y coordinate";
+				std::cin >> y;
+				if(!y)
+				{
+					y=ydefault;
+					interfacelog.log("y=ydefault= " + std::to_string(y));
+				}
+				std::cout << "Enter your sigma_x";
+				std::cin >> sigma_x;
+				if(!sigma_x)
+				{
+					sigma_x=sigma_x_default;
+					interfacelog.log("sigma_x=sigma_x_default= " + std::to_string(sigma_x));
+				}
+				std::cout << "Enter your sigma_y";
+				std::cin >> sigma_y;
+				if(!sigma_y)
+				{
+					sigma_y=sigma_y_default;
+					interfacelog.log("sigma_y=sigma_y_default= " + std::to_string(sigma_y));
+				}
+				std::cout << "Enter your height";
+				std::cin >> h;
+				if(!h)
+				{
+					h=hdefault;
+					interfacelog.log("h=hdefault=" + std::to_string(h));
+				}
+				interfacelog.log("Command gauss with x= " + std::to_string(x) + " y= " + std::to_string(y) + " sigma_x= " + std::to_string(sigma_x) + " sigma_y= " + std::to_string(sigma_y) + " h= " + std::to_string(h) + " sent to control");
+                		control.setnewgauss(x, y, sigma_x, sigma_y, h);
+        		} 
+			else if (command == "generate") 
+			{
+				interfacelog.log("Command generate sent to control");
+                		control.generate();
+        		} 
+			else if (command == "gnuplot") 
+			{
+                		std::string savefile;
+                		std::cout << "in what file do you want to save for gnuplot: ";
+                		std::cin >> savefile;
+				interfacelog.log("Command gnuplot with file " + savefile + " sent to control");
+                		control.controlgnuplot(savefile);
+         		}
+			else if (command == "wBMP") 
+			{
+                		std::string savefileBMP;
+				int k;
+				std::cout << "in what file do you want to save for BMP: ";
+                		std::cin >> savefileBMP;
+				std::cout << "if you want wb-picture, enter 1, else enter 2";
+				std::cin >> k;
+				interfacelog.log("Command wBMP with file " + savefileBMP + "k=" + std::to_string(k) + " sent to control");
+                		control.controlwBMP(savefileBMP,k);
+         		}
+			else if (command == "rBMP") 
+			{
+                		std::string readfileBMP;
+				std::cout << "from what file do you want to read BMP data?";
+                		std::cin >> readfileBMP;
+				interfacelog.log("Command rBMP with file " + readfileBMP + " sent to control");
+                		control.controlrBMP(readfileBMP);
+         		}
+			else if (command=="BIN") 
+			{
+				int cut;
+				std::cout << "enter your cut limit ";
+				std::cin >> cut;                      
+				interfacelog.log("Command BIN with cut= " + std::to_string(cut) + " sent to control");
+                		control.controlBin(cut);
+         		}
+			else if (command == "Wave") 
+			{
+				int n;
+				std::cout << "enter your 'n' for Wave";
+				std::cin >> n;
+				interfacelog.log("Command Wave with n= " + std::to_string(n) + " sent to control");
+                		control.controlWave(n);
+         		}
+			else if (command == "kMeans") 
+			{
+				int k;
+				std::cout << "enter your 'n' for Wave";
+				std::cin >> k;
+				int p;
+				std::cout << "enter your nuber of centers 'p' for kMeans";
+				std::cin >> p;                
+				interfacelog.log("Command kMeans with k= " + std::to_string(k) + " p=" + std::to_string(p) + " sent to control");
+                		control.controlkMeans(k,p);
+			}
+	    		else if (command=="away")
+	    		{		
+		    		interfacelog.log("command away");
+				return;
+	    		}		
+         		else 
+	 		{
+               			std::cerr << "Error: wrong command.\n";
+				interfacelog.log("Wrong command from keyboard");
+         		}
+     		}
+	}	
+	else
+	{
+		std::cerr << "Error: wrong command in config.\n";
+	}
+}
+};
+
+int main() {
+    Myinterface myinterface;
+    myinterface.prog();
+    return 0;
+}
